@@ -91,32 +91,41 @@ void sr_handlepacket(struct sr_instance* sr,
     /* extract ip packet and parse ip header */
     uint8_t * ip_packet = packet + sizeof(sr_ethernet_hdr_t);
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
-    /* get underlying protocol */
-    uint8_t ip_proto = ip_protocol(ip_packet);
     
-    /* ICMP: if packet contains an icmp packet */
-    if (ip_proto == ip_protocol_icmp) {
-      /* extract icmp packet and parse icmp header */
-      uint8_t * icmp_packet = ip_packet + sizeof(sr_ip_hdr_t);
-      sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) icmp_packet;
-      /* if this is a icmp echo request */
-      if (icmp_hdr->icmp_type == 8) {
-        /* TODO: check if checksum is valid and send an icmp echo reply to sending host. */
-      /* if this is NOT an icmp echo request */
+    /* if packet is for our interface */
+    if (ip->hdr == iface->ip) {
+      /* get underlying protocol */
+      uint8_t ip_proto = ip_protocol(ip_packet);
+      
+      /* ICMP: if packet contains an icmp packet */
+      if (ip_proto == ip_protocol_icmp) {
+        /* extract icmp packet and parse icmp header */
+        uint8_t * icmp_packet = ip_packet + sizeof(sr_ip_hdr_t);
+        sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) icmp_packet;
+        /* if this is a icmp echo request */
+        if (icmp_hdr->icmp_type == 8) {
+          /* TODO: check if checksum is valid and send an icmp echo reply to sending host. */
+        /* if this is NOT an icmp echo request */
+        } else {
+          /* ignore packet */
+        }
+      /* TCP/UDP: if packet contains TCP(code=6)/UDP(code=17) payload */
+      } else if (ip_proto == 6 || ip_proto == 17) {
+        /* TODO: send an ICMP port unreachable to the sending host */
+      /* OTHERWISE: if packet contains something other than icmp/tcp/udp */
       } else {
-        /* ignore packet */
+        /* ignore the packet */
       }
-    
-    /* NON-ICMP IP: if packet contains something other than icmp */
+    /* if packet is not for our interface */
     } else {
-      /* TODO: handle IP packet:
+      /* TODO: forward packet:
                Deduct 1 from TTL, and recalculate checksum and redo header.
                Look up routing table for IP address, then look in arp cache for MAC address.
                If cache entry does not exist, send ARP request to broadcasting MAC address
                and queue the packet.
-               If cache exists, send packet to destined addresss. */
+               If cache exists, send packet to destined addresss. */ 
     }
-  
+    
   /* ARP: if packet contains a arp packet */
   } else if (ethtype == ethertype_arp) {
     /* extract arp packet and parse arp header */
