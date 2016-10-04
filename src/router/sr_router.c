@@ -93,7 +93,7 @@ void sr_handlepacket(struct sr_instance* sr,
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
     
     /* if packet is for our interface */
-    if (ip->hdr == iface->ip) {
+    if (ip_hdr->ip_dst == iface->ip) {
       /* get underlying protocol */
       uint8_t ip_proto = ip_protocol(ip_packet);
       
