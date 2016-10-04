@@ -79,6 +79,86 @@ void sr_handlepacket(struct sr_instance* sr,
   printf("*** -> Received packet of length %d \n",len);
 
   /* fill in code here */
+  /* useful structs */
+  struct sr_if * iface = sr_get_interface(sr, interface);
+  sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)packet;
+  
+  /* get ethernet type */
+  uint16_t ethtype = ethertype(packet);
+  
+  /* IP: if packet contains an ip packet */
+  if (ethtype == ethertype_ip) {
+    /* extract ip packet and parse ip header */
+    uint8_t * ip_packet = packet + sizeof(sr_ethernet_hdr_t);
+    sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
+    /* get underlying protocol */
+    uint8_t ip_proto = ip_protocol(ip_packet);
+    
+    /* ICMP: if packet contains an icmp packet */
+    if (ip_proto == ip_protocol_icmp) {
+      /* extract icmp packet and parse icmp header */
+      uint8_t * icmp_packet = ip_packet + sizeof(sr_ip_hdr_t);
+      sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) icmp_packet;
+      /* if this is a icmp echo request */
+      if (icmp_hdr->icmp_type == 8) {
+        /* TODO: check if checksum is valid and send an icmp echo reply to sending host. */
+      /* if this is NOT an icmp echo request */
+      } else {
+        /* ignore packet */
+      }
+    
+    /* NON-ICMP IP: if packet contains something other than icmp */
+    } else {
+      /* if packet contains a TCP(code=6) or UDP(code=17) payload */
+      if (ip_proto == 6 || ip_proto == 17) {
+        /* TODO: send an icmp port unreachable to the sending host. */
+      } else {
+        /* ignore packet */
+      }
+    }
+  
+  /* ARP: if packet contains a arp packet */
+  } else if (ethtype == ethertype_arp) {
+    /* extract arp packet and parse arp header */
+    uint8_t * arp_packet = packet + sizeof(sr_ethernet_hdr_t);
+    sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) arp_packet;
+    /* ARP REQUEST: if this is an arp request */
+    if (ntohs(arp_hdr->ar_op) == arp_op_request) {
+      /* send arp reply to sending host */
+      /* create an arp packet & fill in information */
+      sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
+      tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
+      tosend_arp->ar_pro = ntohs(ethertype_ip);
+      tosend_arp->ar_hln = ETHER_ADDR_LEN;
+      tosend_arp->ar_pln = 4;
+      tosend_arp->ar_op = ntohs(arp_op_reply);
+      memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
+      memcpy(tosend_arp->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
+      tosend_arp->ar_sip = iface->ip;
+      tosend_arp->ar_tip = arp_hdr->ar_sip;
+      /* create an ethernet packet & copy the arp packet into it */
+      sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+      memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
+      /* fill in ethernet header */
+      memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
+      memcpy(tosend_eth->ether_shost, iface->addr, ETHER_ADDR_LEN);
+      tosend_eth->ether_type = ntohs(ethertype_arp);
+      /* send packet */
+      sr_send_packet(sr, (uint8_t *)tosend_eth, len, interface);
+      /* free all memory allocated */
+      free(tosend_arp);
+      free(tosend_eth);
+    /* ARP REPLY: if this is an arp reply */
+    } else if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
+      /* TODO: Cache IP-MAC mapping */
+    /* ERROR: if this is neither an arp request or reply */
+    } else {
+      /* ignore packet */
+    }
+  /* ERROR: if the packet contains something other than arp or ip */
+  } else {
+    /* ignore packet */
+  }
 
 }/* end sr_ForwardPacket */
 
