@@ -109,12 +109,12 @@ void sr_handlepacket(struct sr_instance* sr,
     
     /* NON-ICMP IP: if packet contains something other than icmp */
     } else {
-      /* if packet contains a TCP(code=6) or UDP(code=17) payload */
-      if (ip_proto == 6 || ip_proto == 17) {
-        /* TODO: send an icmp port unreachable to the sending host. */
-      } else {
-        /* ignore packet */
-      }
+      /* TODO: handle IP packet:
+               Deduct 1 from TTL, and recalculate checksum and redo header.
+               Look up routing table for IP address, then look in arp cache for MAC address.
+               If cache entry does not exist, send ARP request to broadcasting MAC address
+               and queue the packet.
+               If cache exists, send packet to destined addresss. */
     }
   
   /* ARP: if packet contains a arp packet */
