@@ -203,8 +203,16 @@ void sr_handlepacket(struct sr_instance* sr,
     } else if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
       /* Cache IP-MAC mapping */
       struct sr_arpreq * arpreq = sr_arpcache_insert(&sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
-      if (!arpreq) {
-        /* do something if needed */
+      if (arpreq) {
+        struct sr_packet *pkt;
+        for(pkt = arpreq->packets; pkt != NULL; pkt = pkt->next) {
+          /* fill in destination MAC addr */
+          sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *)pkt;
+          memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
+          /* send packet */
+          sr_send_packet(sr, (uint8_t *)tosend_eth, pkt->len, pkt->iface);
+        }
+        sr_arpreq_destroy(&sr->cache, arpreq);
       }
     /* ERROR: if this is neither an arp request or reply */
     } else {
