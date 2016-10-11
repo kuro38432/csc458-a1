@@ -16,9 +16,32 @@
   checking whether we should resend an request or destroy the arp request.
   See the comments in the header file for an idea of what it should look like.
 */
-void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    /* Fill this in */
+void sr_arpcache_sweepreqs(struct sr_instance *sr) {
+  struct sr_arpreq *req;
+  struct sr_arpreq *next;
+  for(req = sr->cache.requests; req != NULL; req = next) {
+    next = req->next;
+    handle_arpreq(req, sr);
+  }
 }
+
+void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
+  time_t now = time(0);
+  if (now - req->sent > 1.0) {
+    if (req->times_sent >= 5) {
+      struct sr_packet *pkt;
+      for(pkt = req->packets; pkt != NULL; pkt = pkt->next) {
+         /* TODO: make ICMP packet, wrap in IP and Ethernet, send back to sender */
+      }
+      sr_arpreq_destroy(&sr->cache, req);
+    } else {
+      /* TODO: send arp request for this sr_arpreq */
+      req->sent = now;
+      req->times_sent++;
+    }
+  }
+}
+
 
 /* You should not need to touch the rest of this code. */
 
