@@ -67,6 +67,10 @@ int sr_read_from_server(struct sr_instance* );
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
+int valid_pkt(sr_ip_hdr_t *pkt);
+sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code);
+sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
+sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
