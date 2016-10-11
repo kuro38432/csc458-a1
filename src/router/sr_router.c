@@ -201,7 +201,11 @@ void sr_handlepacket(struct sr_instance* sr,
       free(tosend_eth);
     /* ARP REPLY: if this is an arp reply */
     } else if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
-      /* TODO: Cache IP-MAC mapping */
+      /* Cache IP-MAC mapping */
+      struct sr_arpreq * arpreq = sr_arpcache_insert(&sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
+      if (!arpreq) {
+        /* do something if needed */
+      }
     /* ERROR: if this is neither an arp request or reply */
     } else {
       /* ignore packet */
