@@ -4,7 +4,6 @@
  * Contact: casado@stanford.edu
  *
  * Description:
- *
  * This file contains all the functions that interact directly
  * with the routing table, as well as the main entry method
  * for routing.
@@ -78,8 +77,10 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(packet);
   assert(interface);
 
+
   printf("*** -> Received packet of length %d \n",len);
   printf("Interface: %s\n", interface);
+  print_hdrs((uint8_t *)packet, len);
 
   /* fill in code here */
   /* useful structs */
@@ -97,12 +98,15 @@ void sr_handlepacket(struct sr_instance* sr,
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
     /* if packet is for our interface */
     if (ip_hdr->ip_dst == iface->ip) {
-      /*TODO: Format so the if stmt covers all code and stops processing the packet. */
-      /*TODO: add handling of TTL elsewhere - must catch at every point where we are decrementing the TTL. */
+      /* If the TTL is 0, send an ICMP packet and stop processing the request. */
       if(ip_hdr->ip_ttl == 0) {
-        sr_icmp_hdr_t * icmp_rsp_hdr = create_icmp(11, 0);
+        sr_icmp_hdr_t *icmp_rsp_hdr = create_icmp(ICMP_TIME_EXCEED, 0);
         sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
         sr_ethernet_hdr_t *eth_rsp_hdr = create_packet(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
+
+
+        /*TODO: am I sending to the right interface? */
+        sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
         
         /* Free ICMP header. */
         free(icmp_rsp_hdr);
@@ -110,8 +114,14 @@ void sr_handlepacket(struct sr_instance* sr,
         free(eth_rsp_hdr);
 
         /* stop processing packet... */ 
-      }
-      /* get underlying protocol */
+      } /* end of TTL exceed: if(ip_hdr->ip_ttl == 0) */
+
+      /* TODO: check if checksum is valid and IP packet meets minimum length. */
+
+     /*  int valid = valid_pkt(ip_hdr); */
+
+      /* The packet has sufficient TTL so continue... */
+      /* Get the underlying protocol */
       uint8_t ip_proto = ip_protocol(ip_packet);
       
       /* ICMP: if packet contains an icmp packet */
@@ -121,10 +131,8 @@ void sr_handlepacket(struct sr_instance* sr,
         sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) icmp_packet;
         /* if this is a icmp echo request */
         if (icmp_hdr->icmp_type == 8) {
-          /* TODO: check if checksum is valid. */
-          
           /* Create ICMP header for response */
-          sr_icmp_hdr_t * icmp_rsp_hdr = create_icmp(0, 0);
+          sr_icmp_hdr_t * icmp_rsp_hdr = create_icmp(ICMP_ECHO, 0);
           
           /* Create IP header. */
           sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
@@ -132,29 +140,30 @@ void sr_handlepacket(struct sr_instance* sr,
           /* Create ethernet frame. */
           sr_ethernet_hdr_t *eth_rsp_hdr = create_packet(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
 
-          /*TODO: actually send ICMP packet. */ 
+          sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); 
+         
           /* Free ICMP header. */ 
           free(icmp_rsp_hdr);
           free(ip_rsp_hdr); 
           free(eth_rsp_hdr);
-        } else { /* end if (icmp_hdr->icmp_type == 8) - echo request */
-          /* ignore packet */
-        }
+        } /* end if (icmp_hdr->icmp_type == 8) - echo request */
+
       /* TCP/UDP: if packet contains TCP(code=6)/UDP(code=17) payload */
       } else if (ip_proto == 6 || ip_proto == 17) {
         sr_icmp_hdr_t * icmp_rsp_hdr = create_icmp(3, 3);
         sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);  
         sr_ethernet_hdr_t *eth_rsp_hdr = create_packet(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
+
+        sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
         /* Free ICMP header. */
         free(icmp_rsp_hdr);
         free(ip_rsp_hdr);
         free(eth_rsp_hdr);
 
-        /* TODO: actually send ICMP packet. */
       /* OTHERWISE: if packet contains something other than icmp/tcp/udp */
-      } else {
-        /* ignore the packet */
-      }
+      } /* end if packet is TCP/UDP - 
+         * else if (ip_proto == 6 || ip_proto == 17) */
+
     /* if packet is not for our interface */
     } else {
       /* TODO: forward packet:
@@ -176,7 +185,7 @@ void sr_handlepacket(struct sr_instance* sr,
     /* ARP REQUEST: if this is an arp request */
     if (ntohs(arp_hdr->ar_op) == arp_op_request) {
       /* send arp reply to sending host */
-      /* create an arp packet & fill in information */
+      /* create an arp packet & fill in information 
       sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
       tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
       tosend_arp->ar_pro = ntohs(ethertype_ip);
@@ -187,13 +196,23 @@ void sr_handlepacket(struct sr_instance* sr,
       memcpy(tosend_arp->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
       tosend_arp->ar_sip = iface->ip;
       tosend_arp->ar_tip = arp_hdr->ar_sip;
+
+      TODO: RENATA PUT THIS COMMENTED SECTION IN CREATE_ARP FUNCTION BELOW
+      */
+      sr_arp_hdr_t *tosend_arp = create_arp(iface, arp_hdr);
       /* create an ethernet packet & copy the arp packet into it */
+/*
       sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-      memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
+      memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t)); */
       /* fill in ethernet header */
+/*
       memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
       memcpy(tosend_eth->ether_shost, iface->addr, ETHER_ADDR_LEN);
       tosend_eth->ether_type = ntohs(ethertype_arp);
+
+      TODO: RENATA PUT THE CREATION OF ETHERNET PACKET IN FUNCTION BELOW
+      */
+      sr_ethernet_hdr_t *tosend_eth = create_arp_eth(iface, arp_hdr, tosend_arp);
       /* send packet */
       sr_send_packet(sr, (uint8_t *)tosend_eth, len, interface);
       /* free all memory allocated */
@@ -223,7 +242,6 @@ void sr_handlepacket(struct sr_instance* sr,
     /* ignore packet */
   }
 
-
 }/* end sr_ForwardPacket */
 
 /*---------------------------------------------------------------------
@@ -245,7 +263,7 @@ int valid_pkt(sr_ip_hdr_t *pkt) {
   orig_cksum = pkt->ip_sum;
   pkt->ip_sum = 0;
   new_cksum = cksum((const void *)pkt, sizeof(sr_ip_hdr_t));
-  pkt->ip_sum = new_cksum;
+  pkt->ip_sum = orig_cksum;
   
   if (orig_cksum == new_cksum) {
     return 1;
@@ -253,74 +271,3 @@ int valid_pkt(sr_ip_hdr_t *pkt) {
     return 0;
   }  
 } /* end valid_pkt */
-
-
-/*---------------------------------------------------------------------
- * Method: create_icmp(uint8_t type, uint8_t code)
- * Scope: Local
- *
- * Returns a pointer to an ICMP header.
- *
- *---------------------------------------------------------------------*/
-sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code) {
-  uint16_t icmp_cksum = 0;
-  sr_icmp_hdr_t * icmp_rsp_hdr = (sr_icmp_hdr_t *) malloc(sizeof(sr_icmp_hdr_t));
-  icmp_rsp_hdr->icmp_type = type;
-  icmp_rsp_hdr->icmp_code = code;
-
-  icmp_rsp_hdr->icmp_sum = 0;
-  icmp_cksum = cksum((const void *)icmp_rsp_hdr, sizeof(sr_icmp_hdr_t));
-  icmp_rsp_hdr->icmp_sum = icmp_cksum;
-  
-  return icmp_rsp_hdr;
-} /* end create_icmp */
-
-
-/*---------------------------------------------------------------------
- * Method: create_ip(sr_ip_hdr_t * ip_hdr)
- * Scope: Local
- *
- * Returns a pointer to an IP header.
- *
- *---------------------------------------------------------------------*/
-/* TODO: Figure out how IP packet calculates total length, id, and fragment flag. */
-sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr) {
-  sr_ip_hdr_t * ip_rsp_hdr = (sr_ip_hdr_t *) malloc(sizeof(sr_ip_hdr_t));
-  
-  memcpy((uint8_t *)ip_rsp_hdr, (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
-   
-  /* Modify the changed fields and recompute the checksum. */
-  ip_rsp_hdr->ip_id = ip_hdr->ip_id + 1;
-  ip_rsp_hdr->ip_sum = 0;
-  
-  /* Switch source and destination address. */
-  uint32_t old_src = ip_rsp_hdr->ip_src;
-  ip_rsp_hdr->ip_src = ip_rsp_hdr->ip_dst;
-  ip_rsp_hdr->ip_dst = old_src;
-  uint16_t ip_cksum = cksum((const void *)ip_rsp_hdr, sizeof(sr_ip_hdr_t));
-  ip_rsp_hdr->ip_sum = ip_cksum;
-
-  return ip_rsp_hdr;
-} /* end create_icmp */
-
-
-/*---------------------------------------------------------------------
- * Method: create_packet(sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, sr_arp_hdr_t arp_hdr)
- * Scope: Local
- *
- * Returns a pointer to a full Ethernet frame that can be sent on the
- * network. 
- *
- *---------------------------------------------------------------------*/
-sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr) {
-    /* TODO: implement creation of Ethernet frame containing ARP or IP. */
-    sr_ethernet_hdr_t * ether_rsp_hdr = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t));
-    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t), (uint8_t *)icmp_hdr, sizeof(sr_icmp_hdr_t));
-    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t), (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
-    
-  /* Fill in the ethernet header. */
-  memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN);
-  memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
-  ether_rsp_hdr->ether_type = ntohs(ethertype_ip);
-  return ether_rsp_hdr;
-}

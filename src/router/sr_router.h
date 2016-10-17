@@ -29,6 +29,10 @@
 
 #define INIT_TTL 255
 #define PACKET_DUMP_SIZE 1024
+#define ICMP_ECHO 0
+#define ICMP_NO_DST 3
+#define ICMP_NO_PORT 3
+#define ICMP_TIME_EXCEED 11
 
 /* forward declare */
 struct sr_if;
@@ -68,6 +72,10 @@ int sr_read_from_server(struct sr_instance* );
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 int valid_pkt(sr_ip_hdr_t *pkt);
+
+/* -- create_packet.c -- */
+sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr);
+sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, sr_arp_hdr_t *tosend_arp);
 sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code);
 sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
 sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr);
