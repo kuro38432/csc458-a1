@@ -35,8 +35,10 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       }
       sr_arpreq_destroy(&sr->cache, req);
     } else {
+      char * interface = req->packets->iface;
+      struct sr_if *iface = sr_get_interface(sr, interface);
       /* send arp request for this sr_arpreq */
-			sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
+      sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
       tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
       tosend_arp->ar_pro = ntohs(ethertype_ip);
       tosend_arp->ar_hln = ETHER_ADDR_LEN;
