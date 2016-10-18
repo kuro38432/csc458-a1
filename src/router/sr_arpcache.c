@@ -38,17 +38,7 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       char * interface = req->packets->iface;
       struct sr_if *iface = sr_get_interface(sr, interface);
       /* send arp request for this sr_arpreq */
-      sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
-      tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
-      tosend_arp->ar_pro = ntohs(ethertype_ip);
-      tosend_arp->ar_hln = ETHER_ADDR_LEN;
-      tosend_arp->ar_pln = 4;
-      tosend_arp->ar_op = ntohs(arp_op_request);
-      memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
-      /* which interface should this request be sent from? */
-      memcpy(tosend_arp->ar_tha,(uint8_t *) -1, ETHER_ADDR_LEN);
-      tosend_arp->ar_sip = iface->ip;
-      tosend_arp->ar_tip = req->ip;
+      sr_arp_hdr_t * tosend_arp = create_arp_request(iface, req->ip);
       sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
       memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
       memcpy(tosend_eth->ether_dhost, tosend_arp->ar_tha, ETHER_ADDR_LEN);
