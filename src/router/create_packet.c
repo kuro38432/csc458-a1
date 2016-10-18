@@ -69,6 +69,30 @@ sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
   return tosend_arp;
 }
 
+/*---------------------------------------------------------------------
+ * Method: create_arp_request(uint8_t type, uint8_t code)
+ * Scope: Local
+ *
+ * Returns a pointer to an ARP header.
+ *
+ *---------------------------------------------------------------------*/
+sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip) {
+  sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
+  
+  tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
+  tosend_arp->ar_pro = ntohs(ethertype_ip);
+  tosend_arp->ar_hln = ETHER_ADDR_LEN;
+  tosend_arp->ar_pln = 4;
+  tosend_arp->ar_op = ntohs(arp_op_request);
+
+  memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
+  memcpy(tosend_arp->ar_tha, (uint8_t *) -1, ETHER_ADDR_LEN);
+
+  tosend_arp->ar_sip = iface->ip;
+  tosend_arp->ar_tip = ip;  
+
+  return tosend_arp;
+}
 
 /*---------------------------------------------------------------------
  * Method: create_packet(sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, sr_arp_hdr_t arp_hdr)
@@ -84,6 +108,25 @@ sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, s
   /* fill in ethernet header */
   memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
   memcpy(tosend_eth->ether_shost, iface->addr, ETHER_ADDR_LEN);
+  tosend_eth->ether_type = ntohs(ethertype_arp);
+
+  return tosend_eth;
+}
+
+/*---------------------------------------------------------------------
+ * Method: create_arp_req_eth(sr_arp_hdr_t *tosend_arp)
+ * Scope: Local
+ *
+ * Create full ARP request packet (Ethernet frame)
+ *
+ *---------------------------------------------------------------------*/
+sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
+  sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+  memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
+
+  /* fill in ethernet header */
+  memcpy(tosend_eth->ether_dhost, tosend_arp->ar_tha, ETHER_ADDR_LEN);
+  memcpy(tosend_eth->ether_shost, tosend_arp->ar_sha, ETHER_ADDR_LEN);
   tosend_eth->ether_type = ntohs(ethertype_arp);
 
   return tosend_eth;
