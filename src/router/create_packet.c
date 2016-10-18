@@ -33,11 +33,8 @@ sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code) {
   icmp_rsp_hdr->icmp_type = type;
   icmp_rsp_hdr->icmp_code = code;
 
+  /* this should work? still have to figure out if len really is sizeof(sr_icmp_hdr_t) */
   icmp_rsp_hdr->icmp_sum = 0;
-  icmp_cksum = cksum((const void *)icmp_rsp_hdr, sizeof(sr_icmp_hdr_t));
-  icmp_rsp_hdr->icmp_sum = icmp_cksum;
-
-  /* ICMP requires that we recalculate the checksum. */
   icmp_cksum = cksum((const void *)icmp_rsp_hdr, sizeof(sr_icmp_hdr_t));
   icmp_rsp_hdr->icmp_sum = icmp_cksum;
 
@@ -69,6 +66,30 @@ sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
   return tosend_arp;
 }
 
+/*---------------------------------------------------------------------
+ * Method: create_arp_request(uint8_t type, uint8_t code)
+ * Scope: Local
+ *
+ * Returns a pointer to an ARP header.
+ *
+ *---------------------------------------------------------------------*/
+sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip) {
+  sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
+
+  tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
+  tosend_arp->ar_pro = ntohs(ethertype_ip);
+  tosend_arp->ar_hln = ETHER_ADDR_LEN;
+  tosend_arp->ar_pln = 4;
+  tosend_arp->ar_op = ntohs(arp_op_request);
+
+  memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
+  memcpy(tosend_arp->ar_tha, (uint8_t *) -1, ETHER_ADDR_LEN);
+
+  tosend_arp->ar_sip = iface->ip;
+  tosend_arp->ar_tip = ip;
+
+  return tosend_arp;
+}
 
 /*---------------------------------------------------------------------
  * Method: create_packet(sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, sr_arp_hdr_t arp_hdr)
@@ -84,6 +105,25 @@ sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, s
   /* fill in ethernet header */
   memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
   memcpy(tosend_eth->ether_shost, iface->addr, ETHER_ADDR_LEN);
+  tosend_eth->ether_type = ntohs(ethertype_arp);
+
+  return tosend_eth;
+}
+
+/*---------------------------------------------------------------------
+ * Method: create_arp_req_eth(sr_arp_hdr_t *tosend_arp)
+ * Scope: Local
+ *
+ * Create full ARP request packet (Ethernet frame)
+ *
+ *---------------------------------------------------------------------*/
+sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
+  sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+  memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
+
+  /* fill in ethernet header */
+  memcpy(tosend_eth->ether_dhost, tosend_arp->ar_tha, ETHER_ADDR_LEN);
+  memcpy(tosend_eth->ether_shost, tosend_arp->ar_sha, ETHER_ADDR_LEN);
   tosend_eth->ether_type = ntohs(ethertype_arp);
 
   return tosend_eth;
@@ -112,6 +152,9 @@ sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr) {
   uint32_t old_src = ip_rsp_hdr->ip_src;
   ip_rsp_hdr->ip_src = ip_rsp_hdr->ip_dst;
   ip_rsp_hdr->ip_dst = old_src;
+  /* TODO: this part makes this function specific for icmp, so if we want to
+           use it for something else probably should separate this out.*/
+  ip_rsp_hdr->ip_p = ip_protocol_icmp;
   /* TODO: not sure if we should keep this here... decrement TTL. */
   ip_rsp_hdr->ip_ttl = ip_hdr->ip_ttl - 1;
   uint16_t ip_cksum = cksum((const void *)ip_rsp_hdr, sizeof(sr_ip_hdr_t));
