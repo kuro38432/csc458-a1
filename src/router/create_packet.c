@@ -110,6 +110,25 @@ sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, s
 }
 
 /*---------------------------------------------------------------------
+ * Method: create_arp_req_eth(sr_arp_hdr_t *tosend_arp)
+ * Scope: Local
+ *
+ * Create full ARP request packet (Ethernet frame)
+ *
+ *---------------------------------------------------------------------*/
+sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
+  sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+  memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
+
+  /* fill in ethernet header */
+  memcpy(tosend_eth->ether_dhost, tosend_arp->ar_tha, ETHER_ADDR_LEN);
+  memcpy(tosend_eth->ether_shost, tosend_arp->ar_sha, ETHER_ADDR_LEN);
+  tosend_eth->ether_type = ntohs(ethertype_arp);
+
+  return tosend_eth;
+}
+
+/*---------------------------------------------------------------------
  * Method: create_ip(sr_ip_hdr_t * ip_hdr)
  * Scope: Local
  *
