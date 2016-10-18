@@ -112,11 +112,10 @@ sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr) {
   uint32_t old_src = ip_rsp_hdr->ip_src;
   ip_rsp_hdr->ip_src = ip_rsp_hdr->ip_dst;
   ip_rsp_hdr->ip_dst = old_src;
+  /* TODO: not sure if we should keep this here... decrement TTL. */
+  ip_rsp_hdr->ip_ttl = ip_hdr->ip_ttl - 1;
   uint16_t ip_cksum = cksum((const void *)ip_rsp_hdr, sizeof(sr_ip_hdr_t));
   ip_rsp_hdr->ip_sum = ip_cksum;
-
-  /*TODO: maybe remove this later - decrement the TTL for ICMP. */
-  ip_rsp_hdr->ip_ttl = ip_hdr->ip_ttl - 1;
 
   return ip_rsp_hdr;
 } /* end create_icmp */
