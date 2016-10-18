@@ -183,3 +183,16 @@ sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_
   ether_rsp_hdr->ether_type = ntohs(ethertype_ip);
   return ether_rsp_hdr;
 }
+
+sr_ethernet_hdr_t * create_packet_wlen(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len) {
+    /* TODO: implement creation of Ethernet frame containing ARP or IP. */
+    sr_ethernet_hdr_t * ether_rsp_hdr = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + icmp_len);
+    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t), (uint8_t *)icmp_hdr, icmp_len);
+    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t), (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
+
+  /* Fill in the ethernet header. */
+  memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN);
+  memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
+  ether_rsp_hdr->ether_type = ntohs(ethertype_ip);
+  return ether_rsp_hdr;
+}
