@@ -65,6 +65,30 @@ sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
   return tosend_arp;
 }
 
+/*---------------------------------------------------------------------
+ * Method: create_arp_request(uint8_t type, uint8_t code)
+ * Scope: Local
+ *
+ * Returns a pointer to an ARP header.
+ *
+ *---------------------------------------------------------------------*/
+sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip) {
+  sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
+  
+  tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
+  tosend_arp->ar_pro = ntohs(ethertype_ip);
+  tosend_arp->ar_hln = ETHER_ADDR_LEN;
+  tosend_arp->ar_pln = 4;
+  tosend_arp->ar_op = ntohs(arp_op_request);
+
+  memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
+  memcpy(tosend_arp->ar_tha, (uint8_t *) -1, ETHER_ADDR_LEN);
+
+  tosend_arp->ar_sip = iface->ip;
+  tosend_arp->ar_tip = ip;  
+
+  return tosend_arp;
+}
 
 /*---------------------------------------------------------------------
  * Method: create_packet(sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, sr_arp_hdr_t arp_hdr)
