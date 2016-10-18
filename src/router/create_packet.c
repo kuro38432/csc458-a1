@@ -37,6 +37,10 @@ sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code) {
   icmp_cksum = cksum((const void *)icmp_rsp_hdr, sizeof(sr_icmp_hdr_t));
   icmp_rsp_hdr->icmp_sum = icmp_cksum;
 
+  /* ICMP requires that we recalculate the checksum. */
+  icmp_cksum = cksum((const void *)icmp_rsp_hdr, sizeof(sr_icmp_hdr_t));
+  icmp_rsp_hdr->icmp_sum = icmp_cksum;
+
   return icmp_rsp_hdr;
 } /* end create_icmp */
 
@@ -100,7 +104,8 @@ sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr) {
   memcpy((uint8_t *)ip_rsp_hdr, (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
 
   /* Modify the changed fields and recompute the checksum. */
-  ip_rsp_hdr->ip_id = ip_hdr->ip_id + 1;
+  /* ip_rsp_hdr->ip_id = ip_hdr->ip_id + 1; */
+  ip_rsp_hdr->ip_id = 0;
   ip_rsp_hdr->ip_sum = 0;
 
   /* Switch source and destination address. */
@@ -109,6 +114,9 @@ sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr) {
   ip_rsp_hdr->ip_dst = old_src;
   uint16_t ip_cksum = cksum((const void *)ip_rsp_hdr, sizeof(sr_ip_hdr_t));
   ip_rsp_hdr->ip_sum = ip_cksum;
+
+  /*TODO: maybe remove this later - decrement the TTL for ICMP. */
+  ip_rsp_hdr->ip_ttl = ip_hdr->ip_ttl - 1;
 
   return ip_rsp_hdr;
 } /* end create_icmp */
