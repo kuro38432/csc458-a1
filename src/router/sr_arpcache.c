@@ -39,11 +39,7 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       struct sr_if *iface = sr_get_interface(sr, interface);
       /* send arp request for this sr_arpreq */
       sr_arp_hdr_t * tosend_arp = create_arp_request(iface, req->ip);
-      sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-      memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
-      memcpy(tosend_eth->ether_dhost, tosend_arp->ar_tha, ETHER_ADDR_LEN);
-      memcpy(tosend_eth->ether_shost, tosend_arp->ar_sha, ETHER_ADDR_LEN);
-      tosend_eth->ether_type = ntohs(ethertype_arp);
+      sr_ethernet_hdr_t * tosend_eth = create_arp_req_eth(tosend_arp);
       sr_send_packet(sr, (uint8_t*)tosend_eth, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), interface);
       req->sent = now;
       req->times_sent++;
