@@ -85,6 +85,7 @@ void sr_handlepacket(struct sr_instance* sr,
   /* fill in code here */
   /* useful structs */
   struct sr_if * iface = sr_get_interface(sr, interface); 
+  printf("%s\n", iface->name);
   sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)packet;
   
   /* get ethernet type */
@@ -94,26 +95,13 @@ void sr_handlepacket(struct sr_instance* sr,
   if (ethtype == ethertype_ip) {
     printf("Received IP packet\n");
     /* extract ip packet and parse ip header */
-    uint8_t * ip_packet = packet + sizeof(sr_ethernet_hdr_t);
+    uint8_t * ip_packet = packet + size_ether;
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
     /* if packet is for our interface */
     if (ip_hdr->ip_dst == iface->ip) {
       /* If the TTL is 0, send an ICMP packet and stop processing the request. */
       if(ip_hdr->ip_ttl == 0) {
-        sr_icmp_hdr_t *icmp_rsp_hdr = create_icmp(ICMP_TIME_EXCEED, 0);
-        sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
-        sr_ethernet_hdr_t *eth_rsp_hdr = create_packet(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
-
-
-        /*TODO: am I sending to the right interface? */
-        sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
-        
-        /* Free ICMP header. */
-        free(icmp_rsp_hdr);
-        free(ip_rsp_hdr);
-        free(eth_rsp_hdr);
-
-        /* stop processing packet... */ 
+        create_and_send_icmp(ICMP_TIME_EXCEED, 0, ip_hdr, eth_hdr, sr, len, interface);
       } /* end of TTL exceed: if(ip_hdr->ip_ttl == 0) */
 
       /* TODO: check if checksum is valid and IP packet meets minimum length. */
@@ -127,7 +115,7 @@ void sr_handlepacket(struct sr_instance* sr,
       /* ICMP: if packet contains an icmp packet */
       if (ip_proto == ip_protocol_icmp) {
         /* extract icmp packet and parse icmp header */
-        uint8_t * icmp_packet = ip_packet + sizeof(sr_ip_hdr_t);
+        uint8_t * icmp_packet = ip_packet + size_ip;
         sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) icmp_packet;
         /* if this is a icmp echo request */
         if (icmp_hdr->icmp_type == 8) {
@@ -137,15 +125,16 @@ void sr_handlepacket(struct sr_instance* sr,
           icmp_hdr->icmp_sum = 0;
 
           uint16_t icmp_cksum = 0;
-          int icmp_len = ntohs(ip_hdr->ip_len)-sizeof(sr_ip_hdr_t);
+          /*TODO: delete this comment int icmp_len = ntohs(ip_hdr->ip_len)-sizeof(sr_ip_hdr_t); */
+          int icmp_len = size_icmp_t3 + ICMP_DATA_SIZE;
           icmp_cksum = cksum((const void *)icmp_hdr, icmp_len);
           icmp_hdr->icmp_sum = icmp_cksum;
           
           /* Create IP header. */
-          sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
+          sr_ip_hdr_t *ip_rsp_hdr = create_ip(ip_hdr);
           
           /* Create ethernet frame. */
-          sr_ethernet_hdr_t *eth_rsp_hdr = create_packet_wlen(eth_hdr, ip_rsp_hdr, icmp_hdr, icmp_len);
+          sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt(eth_hdr, ip_rsp_hdr, icmp_hdr, icmp_len);
 
           sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); 
          
@@ -156,22 +145,28 @@ void sr_handlepacket(struct sr_instance* sr,
 
       /* TCP/UDP: if packet contains TCP(code=6)/UDP(code=17) payload */
       } else if (ip_proto == 6 || ip_proto == 17) {
-        sr_icmp_hdr_t * icmp_rsp_hdr = create_icmp(3, 3);
-        sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);  
-        sr_ethernet_hdr_t *eth_rsp_hdr = create_packet(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
-
-        sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
-        /* Free ICMP header. */
-        free(icmp_rsp_hdr);
-        free(ip_rsp_hdr);
-        free(eth_rsp_hdr);
-
-      /* OTHERWISE: if packet contains something other than icmp/tcp/udp */
+        create_and_send_icmp(ICMP_NO_DST, 3, ip_hdr, eth_hdr, sr, len, interface);
+      /* OTHERWISE: packet contains something other than icmp/tcp/udp */
       } /* end if packet is TCP/UDP - 
          * else if (ip_proto == 6 || ip_proto == 17) */
 
     /* if packet is not for our interface */
     } else {
+      /* TODO: remove this test ICMP call later. */
+      create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
+/*
+      sr_icmp_t3_hdr_t *icmp_rsp_hdr = create_icmp_t3(ICMP_NO_DST,0, ip_hdr);
+      sr_ip_hdr_t *ip_rsp_hdr = create_ip(ip_hdr);
+
+      sr_ethernet_hdr_t *eth_rsp_hdr = create_packet_temp(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
+      print_hdrs((uint8_t *) eth_rsp_hdr, len);
+      sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
+      free(icmp_rsp_hdr);
+      free(ip_rsp_hdr);
+      free(eth_rsp_hdr);
+*/
+      /*TODO: test call ends here. */
+
       /* TODO: forward packet:
                Deduct 1 from TTL, and recalculate checksum and redo header.
                Check if TTL is 0 - then send ICMP packet.
@@ -276,4 +271,6 @@ int valid_pkt(sr_ip_hdr_t *pkt) {
   } else {
     return 0;
   }  
+
+  return 1;
 } /* end valid_pkt */

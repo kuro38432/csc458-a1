@@ -73,20 +73,21 @@ void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 int valid_pkt(sr_ip_hdr_t *pkt);
 
-/* -- create_packet.c -- */
-sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr);
-sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip);
-sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, sr_arp_hdr_t *tosend_arp);
-sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp);
-sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code);
-sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
-sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr);
-sr_ethernet_hdr_t * create_packet_wlen(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len);
-
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
 void sr_set_ether_ip(struct sr_instance* , uint32_t );
 void sr_set_ether_addr(struct sr_instance* , const unsigned char* );
 void sr_print_if_list(struct sr_instance* );
+
+/* -- create_packet.c -- */
+sr_icmp_t3_hdr_t *create_icmp_t3(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr);
+sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr);
+sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip);
+sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, sr_arp_hdr_t *tosend_arp);
+sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp);
+sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
+sr_ethernet_hdr_t * create_icmp_pkt_t3(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_t3_hdr_t * icmp_hdr);
+sr_ethernet_hdr_t * create_icmp_pkt(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len);
+void create_and_send_icmp(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr, sr_ethernet_hdr_t *eth_hdr, struct sr_instance *sr, int len, char *interface);
 
 #endif /* SR_ROUTER_H */

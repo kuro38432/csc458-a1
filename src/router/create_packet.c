@@ -21,28 +21,33 @@
 #include "sr_utils.h"
 
 /*---------------------------------------------------------------------
- * Method: create_icmp(uint8_t type, uint8_t code)
+ * Method: create_icmp_t3(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr)
  * Scope: Local
  *
- * Returns a pointer to an ICMP header.
+ * Returns a pointer to an ICMP header of type 3 or type 11.
  *
  *---------------------------------------------------------------------*/
-sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code) {
+sr_icmp_t3_hdr_t * create_icmp_t3(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr) {
   uint16_t icmp_cksum = 0;
-  sr_icmp_hdr_t * icmp_rsp_hdr = (sr_icmp_hdr_t *) malloc(sizeof(sr_icmp_hdr_t));
+  size_t size = 0;
+  size = sizeof(sr_icmp_t3_hdr_t);
+  sr_icmp_t3_hdr_t *icmp_rsp_hdr = (sr_icmp_t3_hdr_t *) malloc(size);
+  /* Copy the IP header. */
+  memcpy(icmp_rsp_hdr->data, (uint8_t *)ip_hdr, ICMP_DATA_SIZE);
+  /*TODO: copy the first 8 bytes of the data after IP header. */
+  /* I wonder what UDP or TCP will print if we tried sending some... */
   icmp_rsp_hdr->icmp_type = type;
   icmp_rsp_hdr->icmp_code = code;
 
-  /* this should work? still have to figure out if len really is sizeof(sr_icmp_hdr_t) */
   icmp_rsp_hdr->icmp_sum = 0;
-  icmp_cksum = cksum((const void *)icmp_rsp_hdr, sizeof(sr_icmp_hdr_t));
+  icmp_cksum = cksum((const void *)icmp_rsp_hdr, size + ICMP_DATA_SIZE);
   icmp_rsp_hdr->icmp_sum = icmp_cksum;
 
   return icmp_rsp_hdr;
-} /* end create_icmp */
+}
 
 /*---------------------------------------------------------------------
- * Method: create_arp(uint8_t type, uint8_t code)
+ * Method: create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr)
  * Scope: Local
  *
  * Returns a pointer to an ARP header.
@@ -67,7 +72,7 @@ sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
 }
 
 /*---------------------------------------------------------------------
- * Method: create_arp_request(uint8_t type, uint8_t code)
+ * Method: create_arp_request(struct sr_if *iface, uint8_t ip)
  * Scope: Local
  *
  * Returns a pointer to an ARP header.
@@ -92,10 +97,11 @@ sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip) {
 }
 
 /*---------------------------------------------------------------------
- * Method: create_packet(sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, sr_arp_hdr_t arp_hdr)
+ * Method: create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, 
+ *                        sr_arp_hdr_t *tosend_arp)
  * Scope: Local
  *
- * Create full ARP packet (Ethernet frame)
+ * Create full ARP packet including the ethernet frame.
  *
  *---------------------------------------------------------------------*/
 sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, sr_arp_hdr_t *tosend_arp) {
@@ -114,7 +120,7 @@ sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, s
  * Method: create_arp_req_eth(sr_arp_hdr_t *tosend_arp)
  * Scope: Local
  *
- * Create full ARP request packet (Ethernet frame)
+ * Create full ARP request packet including the ethernet frame. 
  *
  *---------------------------------------------------------------------*/
 sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
@@ -133,49 +139,52 @@ sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
  * Method: create_ip(sr_ip_hdr_t * ip_hdr)
  * Scope: Local
  *
- * Returns a pointer to an IP header.
+ * Returns a pointer to an IP header with the same protocol as the provided
+ * ip_hdr. Source and destination address will be swapped.
  *
  *---------------------------------------------------------------------*/
-/* TODO: Figure out how IP packet calculates total length, id, and fragment flag. 
- * I asked some questions on Piazza... still confused. */
-sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr) {
-  sr_ip_hdr_t * ip_rsp_hdr = (sr_ip_hdr_t *) malloc(sizeof(sr_ip_hdr_t));
+sr_ip_hdr_t *create_ip(sr_ip_hdr_t * ip_hdr) {
+  sr_ip_hdr_t *ip_rsp_hdr = (sr_ip_hdr_t *) malloc(sizeof(sr_ip_hdr_t));
 
   memcpy((uint8_t *)ip_rsp_hdr, (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
 
-  /* Modify the changed fields and recompute the checksum. */
-  /* ip_rsp_hdr->ip_id = ip_hdr->ip_id + 1; */
-  ip_rsp_hdr->ip_id = 0;
+  /* Set cksum to 0 so that we can recompute the cksum. */
   ip_rsp_hdr->ip_sum = 0;
 
   /* Switch source and destination address. */
   uint32_t old_src = ip_rsp_hdr->ip_src;
   ip_rsp_hdr->ip_src = ip_rsp_hdr->ip_dst;
   ip_rsp_hdr->ip_dst = old_src;
-  /* TODO: this part makes this function specific for icmp, so if we want to
-           use it for something else probably should separate this out.*/
+  
   ip_rsp_hdr->ip_p = ip_protocol_icmp;
-  /* TODO: not sure if we should keep this here... decrement TTL. */
   ip_rsp_hdr->ip_ttl = ip_hdr->ip_ttl - 1;
   uint16_t ip_cksum = cksum((const void *)ip_rsp_hdr, sizeof(sr_ip_hdr_t));
   ip_rsp_hdr->ip_sum = ip_cksum;
 
   return ip_rsp_hdr;
-} /* end create_icmp */
+}
 
 /*---------------------------------------------------------------------
- * Method: create_packet(sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, sr_arp_hdr_t arp_hdr)
+ * Method: create_icmp_pkt_t3(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t *ip_hdr,
+ *                            sr_icmp_t3_hdr_t *icmp_hdr) 
  * Scope: Local
  *
- * Returns a pointer to a full Ethernet frame that can be sent on the
- * network.
+ * Returns a pointer to an Ethernet frame encapsulating an IP header and
+ * ICMP type 3 header that can be sent out on the network.
  *
  *---------------------------------------------------------------------*/
-sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr) {
-    /* TODO: implement creation of Ethernet frame containing ARP or IP. */
-    sr_ethernet_hdr_t * ether_rsp_hdr = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t));
-    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t), (uint8_t *)icmp_hdr, sizeof(sr_icmp_hdr_t));
-    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t), (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
+sr_ethernet_hdr_t * create_icmp_pkt_t3
+  (  sr_ethernet_hdr_t * eth_hdr, 
+     sr_ip_hdr_t * ip_hdr, 
+     sr_icmp_t3_hdr_t * icmp_hdr ) 
+{
+  sr_ethernet_hdr_t * ether_rsp_hdr = \
+    (sr_ethernet_hdr_t *) malloc(size_ether + size_ip + size_icmp_t3);
+  /* Copy the ICMP header into memory. */
+  memcpy(((uint8_t *) ether_rsp_hdr) + size_ether + size_ip, 
+         (uint8_t *)icmp_hdr, size_icmp_t3);
+  /* Copy the IP header into memory. */ 
+  memcpy(((uint8_t *) ether_rsp_hdr) + size_ether, (uint8_t *)ip_hdr, size_ip);
 
   /* Fill in the ethernet header. */
   memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN);
@@ -184,15 +193,61 @@ sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_
   return ether_rsp_hdr;
 }
 
-sr_ethernet_hdr_t * create_packet_wlen(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len) {
+/*---------------------------------------------------------------------
+ * Method: create_icmp_pkt(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t *ip_hdr,
+ *                         sr_icmp_t3_hdr_t *icmp_hdr, int icmp_len)
+ * Scope: Local
+ *
+ * Returns a pointer to an Ethernet frame encapsulating an IP header and
+ * ICMP header that can be sent out on the network.
+ *
+ *---------------------------------------------------------------------*/
+sr_ethernet_hdr_t *create_icmp_pkt
+  ( sr_ethernet_hdr_t * eth_hdr, 
+    sr_ip_hdr_t * ip_hdr, 
+    sr_icmp_hdr_t * icmp_hdr, 
+    int icmp_len) 
+{
     /* TODO: implement creation of Ethernet frame containing ARP or IP. */
-    sr_ethernet_hdr_t * ether_rsp_hdr = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + icmp_len);
-    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t), (uint8_t *)icmp_hdr, icmp_len);
-    memcpy(((uint8_t *) ether_rsp_hdr) + sizeof(sr_ethernet_hdr_t), (uint8_t *)ip_hdr, sizeof(sr_ip_hdr_t));
+    sr_ethernet_hdr_t * ether_rsp_hdr = \
+      (sr_ethernet_hdr_t *) malloc(size_ether + size_ip + icmp_len);
+    memcpy(((uint8_t *) ether_rsp_hdr) + size_ether + size_ip, 
+           (uint8_t *)icmp_hdr, icmp_len);
+    memcpy(((uint8_t *) ether_rsp_hdr) + size_ether, 
+           (uint8_t *)ip_hdr, size_ip);
 
   /* Fill in the ethernet header. */
   memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN);
   memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
   ether_rsp_hdr->ether_type = ntohs(ethertype_ip);
   return ether_rsp_hdr;
+}
+
+/*---------------------------------------------------------------------
+ * Method: create_and_send_icmp(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr,
+                                sr_eth_hdr_t *eth_hdr, int len, char *interface)
+ * Scope: Local
+ *
+ * Creates and sends an ICMP packet. Frees all structs used before exiting.
+ *
+ *---------------------------------------------------------------------*/
+void create_and_send_icmp
+  ( uint8_t type, 
+    uint8_t code, 
+    sr_ip_hdr_t *ip_hdr, 
+    sr_ethernet_hdr_t *eth_hdr, 
+    struct sr_instance *sr,
+    int len, 
+    char *interface)
+{
+  sr_icmp_t3_hdr_t *icmp_rsp_hdr = create_icmp_t3(type, code, ip_hdr);
+  sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
+  sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt_t3(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
+  print_hdrs((uint8_t *)eth_rsp_hdr, len);
+  sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
+
+  /* Free all structs. */
+  free(icmp_rsp_hdr);
+  free(ip_rsp_hdr);
+  free(eth_rsp_hdr);
 }

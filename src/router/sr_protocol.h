@@ -169,6 +169,13 @@ enum sr_arp_hrd_fmt {
   arp_hrd_ethernet = 0x0001,
 };
 
+/* Added some enums for the size of the structs. */
+enum {
+  size_ether = sizeof(sr_ethernet_hdr_t),
+  size_ip = sizeof(sr_ip_hdr_t),
+  size_icmp_t3 = sizeof(sr_icmp_t3_hdr_t),
+};
+
 
 struct sr_arp_hdr
 {
