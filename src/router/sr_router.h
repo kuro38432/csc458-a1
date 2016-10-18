@@ -81,6 +81,7 @@ sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp);
 sr_icmp_hdr_t * create_icmp(uint8_t type, uint8_t code);
 sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
 sr_ethernet_hdr_t * create_packet(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr);
+sr_ethernet_hdr_t * create_packet_wlen(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
