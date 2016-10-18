@@ -145,7 +145,7 @@ void sr_handlepacket(struct sr_instance* sr,
           sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
           
           /* Create ethernet frame. */
-          sr_ethernet_hdr_t *eth_rsp_hdr = create_packet_wlen(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
+          sr_ethernet_hdr_t *eth_rsp_hdr = create_packet_wlen(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr, icmp_len);
 
           sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); 
          
