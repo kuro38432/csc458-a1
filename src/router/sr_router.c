@@ -104,10 +104,6 @@ void sr_handlepacket(struct sr_instance* sr,
         create_and_send_icmp(ICMP_TIME_EXCEED, 0, ip_hdr, eth_hdr, sr, len, interface);
       } /* end of TTL exceed: if(ip_hdr->ip_ttl == 0) */
 
-      /* TODO: check if checksum is valid and IP packet meets minimum length. */
-
-     /*  int valid = valid_pkt(ip_hdr); */
-
       /* The packet has sufficient TTL so continue... */
       /* Get the underlying protocol */
       uint8_t ip_proto = ip_protocol(ip_packet);
@@ -152,20 +148,14 @@ void sr_handlepacket(struct sr_instance* sr,
 
     /* if packet is not for our interface */
     } else {
-      /* TODO: remove this test ICMP call later. */
-      create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
-/*
-      sr_icmp_t3_hdr_t *icmp_rsp_hdr = create_icmp_t3(ICMP_NO_DST,0, ip_hdr);
-      sr_ip_hdr_t *ip_rsp_hdr = create_ip(ip_hdr);
-
-      sr_ethernet_hdr_t *eth_rsp_hdr = create_packet_temp(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
-      print_hdrs((uint8_t *) eth_rsp_hdr, len);
-      sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
-      free(icmp_rsp_hdr);
-      free(ip_rsp_hdr);
-      free(eth_rsp_hdr);
-*/
-      /*TODO: test call ends here. */
+      int valid = valid_pkt(ip_hdr);
+      /* TODO: You can uncomment this if you want to see what it looks like when a ICMP is sent
+               because we couldn't find the destination.
+         create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
+       ^ NEED TO DELETE IT LATER
+       */
+      /* If the packet is valid... */
+      if (valid) {
 
       /* TODO: forward packet:
                Deduct 1 from TTL, and recalculate checksum and redo header.
@@ -176,6 +166,7 @@ void sr_handlepacket(struct sr_instance* sr,
                and queue the packet.
                   keep track of ARP requests - if more than 5 sent, send ICMP
                If cache exists, send packet to destined addresss. */ 
+      }
     }
     
   /* ARP: if packet contains a arp packet */
@@ -257,8 +248,7 @@ void sr_handlepacket(struct sr_instance* sr,
 int valid_pkt(sr_ip_hdr_t *pkt) {
   uint16_t orig_cksum = 0;
   uint16_t new_cksum = 0;
-
-  /* TODO: Check packet meets minimum length. */
+  int ret_val = 0;
 
   /* If packet is IP */
   orig_cksum = pkt->ip_sum;
@@ -266,11 +256,10 @@ int valid_pkt(sr_ip_hdr_t *pkt) {
   new_cksum = cksum((const void *)pkt, sizeof(sr_ip_hdr_t));
   pkt->ip_sum = orig_cksum;
   
-  if (orig_cksum == new_cksum) {
-    return 1;
+  if ((orig_cksum == new_cksum) && (sizeof(*(pkt)) == 20)) {
+    ret_val = 1;
   } else {
-    return 0;
+    ret_val = 0;
   }  
-
-  return 1;
+  return ret_val;
 } /* end valid_pkt */
