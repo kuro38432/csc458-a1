@@ -219,7 +219,6 @@ void sr_handlepacket(struct sr_instance* sr,
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
             else{  
               /** queue the raw ethernet packet we recieved */
-
               struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
               printf("============ queued arp request =========\n");
               printf("queued the original packet of size: %d at interface %s\n", len, interface);
@@ -480,7 +479,7 @@ uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
   ip_hdr->ip_sum = new_sum;
 
   /** if TTL reaches 0, send ICMP time exceed */
-  if(ttl == 0){
+  if(ttl == 1){
     /** Create a ICMP packet of type 11 code 0 ICMP packet */
     sr_icmp_t3_hdr_t *time_exceed = create_icmp_t3(ICMP_TIME_EXCEED, 0, ip_hdr);
     /** Create the IP packet */
