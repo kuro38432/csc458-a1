@@ -113,7 +113,7 @@ void sr_handlepacket(struct sr_instance* sr,
     if (ip_hdr->ip_dst == iface->ip) {
       /* If the TTL is 0, send an ICMP packet and stop processing the request. */
       if(ip_hdr->ip_ttl == 0) {
-        create_and_send_icmp(ICMP_TIME_EXCEED, 0, ip_hdr, eth_hdr, sr, len, interface);
+        create_and_send_icmp(ICMP_TIME_EXCEED, 0, ip_hdr, eth_hdr, sr, len, iface->name);
       } /* end of TTL exceed: if(ip_hdr->ip_ttl == 0) */
 
       /* The packet has sufficient TTL so continue... */
@@ -167,7 +167,7 @@ void sr_handlepacket(struct sr_instance* sr,
 
       /* TCP/UDP: if packet contains TCP(code=6)/UDP(code=17) payload */
       } else if (ip_proto == 6 || ip_proto == 17) {
-        create_and_send_icmp(ICMP_NO_DST, 3, ip_hdr, eth_hdr, sr, len, interface);
+        create_and_send_icmp(ICMP_NO_DST, 3, ip_hdr, eth_hdr, sr, len, iface->name);
       /* OTHERWISE: packet contains something other than icmp/tcp/udp */
       } /* end if packet is TCP/UDP - 
          * else if (ip_proto == 6 || ip_proto == 17) */
@@ -217,14 +217,14 @@ void sr_handlepacket(struct sr_instance* sr,
               uint8_t *eth_packet = create_eth_pkt(cur_mac, next_hop_mac, 
                 ethertype_ip, ip_packet, ip_len);
               /** send the packet to the next hop */
-              sr_send_packet(sr, eth_packet, len, interface);
+              sr_send_packet(sr, eth_packet, len, iface->name);
               free(arp_dest);
             }
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
             else{
               printf("============= mark 4 ===========\n");
               /** queue the raw ethernet packet we recieved */
-              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
+              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, iface->name);
               printf("============ queued arp request =========\n");
               printf("queued the original packet of size: %d at interface %s\n", len, interface);
               print_hdr_eth(packet);
@@ -451,7 +451,7 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
     print_hdr_eth(pkt);
     return -1;
   }
-  return htonl(gw);
+  return gw;
 }
 
 /*---------------------------------------------------------------------
