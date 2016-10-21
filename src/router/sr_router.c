@@ -152,7 +152,6 @@ void sr_handlepacket(struct sr_instance* sr,
             memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
             sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, iface->name);
             free(ip_rsp_hdr);
-            free(icmp_hdr);
             free(eth_rsp_hdr);
           } else {
             struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, size_ether + size_ip + icmp_len, iface->name);
