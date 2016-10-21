@@ -29,17 +29,22 @@ void sr_arpcache_sweepreqs(struct sr_instance *sr) {
 void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
   time_t now = time(0);
   if (now - req->sent > 1.0) {
+      printf("/////// mark 2 ////////\n");
+      print_arp_req(req);
     if (req->times_sent >= 5) {
       struct sr_packet *pkt;
       for(pkt = req->packets; pkt != NULL; pkt = pkt->next) {
+        printf("/////// mark 3 ////////\n");
          /* TODO: make ICMP packet, wrap in IP and Ethernet, send back to sender */
-	 sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)pkt;
+	       sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)pkt;
          sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *)(pkt + size_ether);
          struct sr_if * iface = sr_get_interface_from_addr_eth(sr, eth_hdr->ether_dhost);
          create_and_send_icmp(3, 1, ip_hdr, eth_hdr, sr, ip_hdr->ip_len + size_ether, iface->name);
       }
+      printf("/////// mark 4 ////////\n");
       sr_arpreq_destroy(&sr->cache, req);
     } else {
+      printf("/////// mark 5 ////////\n");
       char * interface = req->packets->iface;
       struct sr_if *iface = sr_get_interface(sr, interface);
       /* send arp request for this sr_arpreq */
@@ -48,7 +53,11 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       sr_send_packet(sr, (uint8_t*)tosend_eth, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), interface);
       req->sent = now;
       req->times_sent++;
+      print_hdr_eth((uint8_t*)tosend_eth);
     }
+    printf("/////// mark 6 ////////\n");
+    printf("time: %d\n", now);
+    printf("times sent: %d\n", req->times_sent);
   }
 }
 

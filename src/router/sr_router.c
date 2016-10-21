@@ -25,7 +25,6 @@
 
 /** Function declearation goes here */
 
-
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
  * Scope:  Global
@@ -80,15 +79,15 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(packet);
   assert(interface);
 
-
+  /**
   printf("*** -> Received packet of length %d \n",len);
   printf("Interface: %s\n", interface);
-  print_hdrs((uint8_t *)packet, len);
+  print_hdrs((uint8_t *)packet, len); */
 
   /* fill in code here */
   /* useful structs */
   struct sr_if * iface = sr_get_interface(sr, interface); 
-  printf("%s\n", iface->name);
+  /** printf("%s\n", iface->name); */
   sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)packet;
 
   /* get ethernet type */
@@ -152,6 +151,7 @@ void sr_handlepacket(struct sr_instance* sr,
             memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
             sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, iface->name);
             free(ip_rsp_hdr);
+            free(icmp_hdr);
             free(eth_rsp_hdr);
           } else {
             struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, size_ether + size_ip + icmp_len, iface->name);
@@ -199,12 +199,17 @@ void sr_handlepacket(struct sr_instance* sr,
             printf("%s\n", "sanity check fails");
             /** TODO: send ICMP to host notify the error. */
           }         
-
+          /** printf("============= mark 1 ===========\n");
+          print_hdr_eth((uint8_t *)eth_hdr);
+          print_hdr_ip((uint8_t *)ip_hdr);
+          sr_print_if(iface); */
           /** TTL > 0, the packet is still alive, 
               from updateTTL(), update TTL and recompute checksum */
-          if(updateTTL(sr, eth_hdr, ip_hdr, iface) > 0){
+          if(updateTTL(sr, eth_hdr, ip_hdr, len, iface) > 0){
+            /** printf("============= mark 2 ===========\n"); */
             /** MAC address known, send the package */
             if(arp_dest != NULL){
+              printf("============= mark 3 ===========\n");
               printf("%s\n", "mac exists in the cache.");
               /** next hop mac address */
               unsigned char *next_hop_mac = arp_dest->mac;
@@ -216,7 +221,8 @@ void sr_handlepacket(struct sr_instance* sr,
               free(arp_dest);
             }
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
-            else{  
+            else{
+              printf("============= mark 4 ===========\n");
               /** queue the raw ethernet packet we recieved */
               struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
               printf("============ queued arp request =========\n");
@@ -224,6 +230,7 @@ void sr_handlepacket(struct sr_instance* sr,
               print_hdr_eth(packet);
               print_addr_ip_int(ip_dst);
               handle_arpreq(req, sr);
+              print_arp_req(req);
             }
           }
           /** TTL < 0, do nothing and drop the packet */
@@ -421,7 +428,8 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
 
   /** there doesn't exists route to destination IP */
   if(gw == 0){
-    create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
+    printf("======== No destination in routing table =========\n");
+    uint8_t *pkt = create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
     /** Create a ICMP packet of type 3 code 0 ICMP packet */
     /*sr_icmp_t3_hdr_t *dest_net_unreach = create_icmp_t3(ICMP_NO_DST, 0, ip_hdr);*/
     /** Create the IP packet */
@@ -440,6 +448,7 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
     /** TODO: check the correctness of pkt_len */
     /*unsigned int pkt_len = sizeof(type3_code0_icmp_pkt);
     sr_send_packet(sr, type3_code0_icmp_pkt, pkt_len, interface);*/
+    print_hdr_eth(pkt);
     return -1;
   }
   return htonl(gw);
@@ -456,13 +465,13 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
  * TODO: check if header is redone correctly
  *---------------------------------------------------------------------*/
 uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr, 
-  sr_ip_hdr_t *ip_hdr, struct sr_if *iface){
-  /** current router mac address */
-  unsigned char *cur_mac = iface->addr;
-  /** destination mac address - client mac address */
-  unsigned char *dest_mac = eth_hdr->ether_shost;
+  sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface){
+  /** current router mac address 
+  unsigned char *cur_mac = iface->addr; */
+  /** destination mac address - client mac address
+  unsigned char *dest_mac = eth_hdr->ether_shost;  */
   /** the interface name of which the packet will be sent*/
-  const char *interface = iface->name;
+  /** char *interface = iface->name; */
   /** time to live of the packet */
   uint8_t ttl = ip_hdr->ip_ttl;
   /** header length */
@@ -477,21 +486,44 @@ uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
   /** update the checksum of the id_hdr */
   ip_hdr->ip_sum = new_sum;
 
-  /** if TTL reaches 0, send ICMP time exceed */
+  /** if TTL reaches 0, send ICMP time exceed 
   if(ttl == 1){
-    /** Create a ICMP packet of type 11 code 0 ICMP packet */
+    printf("======== here2 =========\n");
+    uint8_t *pkt = create_and_send_icmp(ICMP_TIME_EXCEED, 0, ip_hdr, eth_hdr, sr, len, interface);
+    print_hdr_eth(pkt);
+    printf("============== PAST ICMP PACKET ================\n"); */
+    /** Create a ICMP packet of type 11 code 0 ICMP packet 
     sr_icmp_t3_hdr_t *time_exceed = create_icmp_t3(ICMP_TIME_EXCEED, 0, ip_hdr);
-    /** Create the IP packet */
+    print_hdr_icmp((uint8_t *) time_exceed); */
+    /** Create the IP packet 
     unsigned int ip_len = size_ip + size_icmp_t3;
     uint8_t *ip_packet = malloc(ip_len);
     memcpy(ip_packet, ip_hdr, size_ip);
     memcpy(ip_packet + size_icmp_t3, time_exceed, size_icmp_t3);
-    /** create the ethernet packet */
+    printf("======== here4 =========\n"); */
+    /** create the ethernet packet 
     uint8_t *type11_code0_icmp_pkt = create_eth_pkt(cur_mac, dest_mac, 
       ethertype_ip, ip_packet, ip_len);
+    printf("======== here5 =========\n");
     unsigned int pkt_len = sizeof(type11_code0_icmp_pkt);
     sr_send_packet(sr, (uint8_t *)type11_code0_icmp_pkt, pkt_len, interface);
     return -1;
-  }
+    printf("======== here6 =========\n"); 
+  } */
   return ttl;
+}
+
+void print_arp_req(struct sr_arpreq *arpreq){
+  struct sr_arpreq *cur;
+  for(cur = arpreq; cur!=NULL; cur = cur->next){
+    printf("======== ip: ");
+    printf("%d\n", cur->ip);
+    //print_addr_ip_int(cur->ip);
+    printf("sent: %d, times sent: %d\n", cur->sent, cur->times_sent);
+    struct sr_packet *pkts;
+    for(pkts = cur->packets; pkts != NULL; pkts = pkts->next){
+      print_hdr_eth(pkts->buf);
+      print_hdr_ip(pkts->buf + sizeof(size_ether));
+    }
+  }
 }

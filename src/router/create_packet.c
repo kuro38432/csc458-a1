@@ -230,7 +230,7 @@ sr_ethernet_hdr_t *create_icmp_pkt
  * Creates and sends an ICMP packet. Frees all structs used before exiting.
  *
  *---------------------------------------------------------------------*/
-void create_and_send_icmp
+uint8_t * create_and_send_icmp
   ( uint8_t type, 
     uint8_t code, 
     sr_ip_hdr_t *ip_hdr, 
@@ -242,7 +242,7 @@ void create_and_send_icmp
   sr_icmp_t3_hdr_t *icmp_rsp_hdr = create_icmp_t3(type, code, ip_hdr);
   sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
   sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt_t3(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
-  print_hdrs((uint8_t *)eth_rsp_hdr, len);
+  /** print_hdrs((uint8_t *)eth_rsp_hdr, len);*/
   
   struct sr_arpcache cache = sr->cache;
   uint32_t ip_dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, len, sr_get_interface(sr, interface));
@@ -257,6 +257,7 @@ void create_and_send_icmp
     struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, len, interface);
     handle_arpreq(req, sr);
   }
+  return (uint8_t *)eth_rsp_hdr;
 
   
   /*sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);*/
