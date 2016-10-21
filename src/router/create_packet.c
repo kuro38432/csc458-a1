@@ -243,10 +243,26 @@ void create_and_send_icmp
   sr_ip_hdr_t * ip_rsp_hdr = create_ip(ip_hdr);
   sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt_t3(eth_hdr, ip_rsp_hdr, icmp_rsp_hdr);
   print_hdrs((uint8_t *)eth_rsp_hdr, len);
-  sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);
+  
+  struct sr_arpcache cache = sr->cache;
+  uint32_t ip_dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, len, sr_get_interface(sr, interface));
+  struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
+  if (arp_dest != NULL) {
+    memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
+    sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, len, interface);
+    free(ip_rsp_hdr);
+    free(icmp_rsp_hdr);
+    free(eth_rsp_hdr);
+  } else {
+    struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, len, interface);
+    handle_arpreq(req, sr);
+  }
+
+  
+  /*sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface);*/
 
   /* Free all structs. */
-  free(icmp_rsp_hdr);
+  /*free(icmp_rsp_hdr);
   free(ip_rsp_hdr);
-  free(eth_rsp_hdr);
+  free(eth_rsp_hdr);*/
 }

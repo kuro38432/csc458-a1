@@ -72,6 +72,13 @@ int sr_read_from_server(struct sr_instance* );
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 int valid_pkt(sr_ip_hdr_t *pkt);
+uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
+ sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface);
+uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
+  sr_ip_hdr_t *ip_hdr, struct sr_if *iface);
+uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac,
+  uint16_t packet_type, uint8_t *ip_packet, unsigned int ip_len);
+
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
