@@ -184,7 +184,7 @@ void sr_handlepacket(struct sr_instance* sr,
           /** current router mac address */
           unsigned char *cur_mac = iface->addr;
           /** Destination IP address from the routing table */
-          uint32_t ip_dst = check_routing_table(sr, eth_hdr, ip_hdr, iface);
+          uint32_t ip_dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
           /** ARP containing MAC address corresponding to the destionation IP address*/
           struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
 
