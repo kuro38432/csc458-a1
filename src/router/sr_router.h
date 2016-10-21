@@ -82,7 +82,7 @@ void sr_print_if_list(struct sr_instance* );
 /* -- create_packet.c -- */
 sr_icmp_t3_hdr_t *create_icmp_t3(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr);
 sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr);
-sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip);
+sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint32_t ip);
 sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, sr_arp_hdr_t *tosend_arp);
 sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp);
 sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
