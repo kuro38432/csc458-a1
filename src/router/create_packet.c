@@ -56,11 +56,11 @@ sr_icmp_t3_hdr_t * create_icmp_t3(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hd
 sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
   sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
   
-  tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
-  tosend_arp->ar_pro = ntohs(ethertype_ip);
+  tosend_arp->ar_hrd = htons(arp_hrd_ethernet);
+  tosend_arp->ar_pro = htons(ethertype_ip);
   tosend_arp->ar_hln = ETHER_ADDR_LEN;
   tosend_arp->ar_pln = 4;
-  tosend_arp->ar_op = ntohs(arp_op_reply);
+  tosend_arp->ar_op = htons(arp_op_reply);
 
   memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
   memcpy(tosend_arp->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
@@ -81,11 +81,11 @@ sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
 sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint32_t ip) {
   sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
 
-  tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
-  tosend_arp->ar_pro = ntohs(ethertype_ip);
+  tosend_arp->ar_hrd = htons(arp_hrd_ethernet);
+  tosend_arp->ar_pro = htons(ethertype_ip);
   tosend_arp->ar_hln = ETHER_ADDR_LEN;
   tosend_arp->ar_pln = 4;
-  tosend_arp->ar_op = ntohs(arp_op_request);
+  tosend_arp->ar_op = htons(arp_op_request);
 
   memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
 
@@ -110,7 +110,7 @@ sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, s
   /* fill in ethernet header */
   memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
   memcpy(tosend_eth->ether_shost, iface->addr, ETHER_ADDR_LEN);
-  tosend_eth->ether_type = ntohs(ethertype_arp);
+  tosend_eth->ether_type = htons(ethertype_arp);
 
   return tosend_eth;
 }
@@ -129,7 +129,7 @@ sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
   /* fill in ethernet header */
   memset(tosend_eth->ether_dhost, -1, ETHER_ADDR_LEN);
   memcpy(tosend_eth->ether_shost, tosend_arp->ar_sha, ETHER_ADDR_LEN);
-  tosend_eth->ether_type = ntohs(ethertype_arp);
+  tosend_eth->ether_type = htons(ethertype_arp);
 
   return tosend_eth;
 }
