@@ -212,7 +212,7 @@ void sr_handlepacket(struct sr_instance* sr,
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
             else{     
               /** queue the raw ethernet packet we recieved */
-              sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
+              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
               handle_arpreq(req, sr);
             }
           }
