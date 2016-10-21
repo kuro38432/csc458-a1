@@ -184,7 +184,7 @@ void sr_handlepacket(struct sr_instance* sr,
           /** current router mac address */
           unsigned char *cur_mac = iface->addr;
           /** Destination IP address from the routing table */
-          uint32_t ip_dst = check_routing_table(sr, eth_hdr, ip_hdr, iface);
+          uint32_t ip_dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
           /** ARP containing MAC address corresponding to the destionation IP address*/
           struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
 
@@ -213,7 +213,7 @@ void sr_handlepacket(struct sr_instance* sr,
             else{     
               /** queue the raw ethernet packet we recieved */
               sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
-              handle_arpreq(req, sr);
+              /** handle_arpreq(req, sr);*/
             }
           }
           /** TTL < 0, do nothing and drop the packet */
@@ -374,9 +374,8 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
   /*unsigned char *dest_mac = eth_hdr->ether_shost;*/
   /** interface name */
   char *interface = iface->name;
-  /** source and destination ip address */
+  /** destination ip address */
   uint32_t ip_dst_add = ip_hdr->ip_dst;
-  uint32_t ip_src_add = ip_hdr->ip_src;
   /** routing table */
   struct sr_rt* rt_walker = sr->routing_table;
   
@@ -392,8 +391,8 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
     /** Avoid finding the source IP address as the next hop IP */
     temp = ip_dst_add & mask;
     dest = dest & mask;
+    printf("============here=============\n");
     if(temp == dest && mask > max_mask){
-      printf("found match");
       gw = rt_walker->gw.s_addr;
       print_addr_ip_int(gw);
       max_mask = mask;
