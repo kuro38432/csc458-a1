@@ -63,7 +63,7 @@ struct sr_if* sr_get_interface(struct sr_instance* sr, const char* name)
  *
  *---------------------------------------------------------------------*/
 
-struct sr_if* sr_get_interface_from_addr(struct sr_instance* sr, unsigned char* eth_addr)
+struct sr_if* sr_get_interface_from_addr(struct sr_instance* sr, uint32_t ip_addr)
 {
     struct sr_if* if_walker = 0;
 
@@ -75,7 +75,7 @@ struct sr_if* sr_get_interface_from_addr(struct sr_instance* sr, unsigned char* 
 
     while(if_walker)
     {
-       if(!memcmp(if_walker->addr,eth_addr,ETHER_ADDR_LEN))
+       if(ip_addr == if_walker->ip)
         { return if_walker; }
         if_walker = if_walker->next;
     }
