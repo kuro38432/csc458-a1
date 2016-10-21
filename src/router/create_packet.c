@@ -78,7 +78,7 @@ sr_arp_hdr_t * create_arp(struct sr_if *iface, sr_arp_hdr_t *arp_hdr) {
  * Returns a pointer to an ARP header.
  *
  *---------------------------------------------------------------------*/
-sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip) {
+sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint32_t ip) {
   sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
 
   tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
@@ -88,7 +88,6 @@ sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint8_t ip) {
   tosend_arp->ar_op = ntohs(arp_op_request);
 
   memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
-  memcpy(tosend_arp->ar_tha, (uint8_t *) -1, ETHER_ADDR_LEN);
 
   tosend_arp->ar_sip = iface->ip;
   tosend_arp->ar_tip = ip;
@@ -128,7 +127,7 @@ sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp) {
   memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t));
 
   /* fill in ethernet header */
-  memcpy(tosend_eth->ether_dhost, tosend_arp->ar_tha, ETHER_ADDR_LEN);
+  memset(tosend_eth->ether_dhost, -1, ETHER_ADDR_LEN);
   memcpy(tosend_eth->ether_shost, tosend_arp->ar_sha, ETHER_ADDR_LEN);
   tosend_eth->ether_type = ntohs(ethertype_arp);
 
