@@ -177,7 +177,7 @@ void sr_handlepacket(struct sr_instance* sr,
        */
       /* If the packet is valid... */
       /**if (valid) { */
-          /** length of the ip packet */ 
+          /** length of the ip packet */           
           unsigned int ip_len = len - size_ip;
           /** ARP cache */
           struct sr_arpcache cache = sr->cache;
@@ -192,7 +192,7 @@ void sr_handlepacket(struct sr_instance* sr,
           if(valid_pkt(ip_hdr) == 0){
             printf("%s\n", "sanity check fails");
             /** TODO: send ICMP to host notify the error. */
-          }
+          }         
 
           /** TTL > 0, the packet is still alive, 
               from updateTTL(), update TTL and recompute checksum */
@@ -210,10 +210,15 @@ void sr_handlepacket(struct sr_instance* sr,
               free(arp_dest);
             }
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
-            else{     
+            else{  
               /** queue the raw ethernet packet we recieved */
-              sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
-              /** handle_arpreq(req, sr);*/
+
+              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
+              printf("============ queued arp request =========\n");
+              printf("queued the original packet of size: %d at interface %s\n", len, interface);
+              print_hdr_eth(packet);
+              print_addr_ip_int(ip_dst);
+              handle_arpreq(req, sr);
             }
           }
           /** TTL < 0, do nothing and drop the packet */
@@ -338,6 +343,17 @@ uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac,
   return eth_pkt;
 }
 
+
+sr_ethernet_hdr_t *create_eth_hdr(unsigned char *src_mac, unsigned char *dest_mac, 
+  uint16_t packet_type){
+  /** create a new ethernet header */
+  sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *) malloc(size_ether);
+  eth_hdr->ether_dhost[ETHER_ADDR_LEN] = *src_mac;
+  eth_hdr->ether_shost[ETHER_ADDR_LEN] = *dest_mac;
+  eth_hdr->ether_type = packet_type;
+  return eth_hdr;
+}
+
 /*---------------------------------------------------------------------
  * Method: create_icmp_eth_hdr(sr_ip_hdr_t *ip_hdr, struct sr_if *iface)
  * Scope: local
@@ -391,10 +407,8 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
     /** Avoid finding the source IP address as the next hop IP */
     temp = ip_dst_add & mask;
     dest = dest & mask;
-    printf("============here=============\n");
     if(temp == dest && mask > max_mask){
       gw = rt_walker->gw.s_addr;
-      print_addr_ip_int(gw);
       max_mask = mask;
     }
     rt_walker = rt_walker->next;
@@ -423,7 +437,7 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
     sr_send_packet(sr, type3_code0_icmp_pkt, pkt_len, interface);*/
     return -1;
   }
-  return gw;
+  return htonl(gw);
 }
 
 /*---------------------------------------------------------------------
