@@ -106,6 +106,16 @@ void sr_handlepacket(struct sr_instance* sr,
     /* extract ip packet and parse ip header */
     uint8_t * ip_packet = packet + size_ether;
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
+    /* ADDED BY EMILY : not sure why but the interface is always eth3 even if it was sent
+                        to another one of our interfaces. So I added this piece of code and
+                        a function in sr_if.c that searchs for an interface through the ip
+                        address and switches it with the current iface if it exists.
+                        not sure if this is what we should do, but know ping and traceroute
+                        works for the other interfaces too. */
+    struct sr_if * iface_ip = sr_get_interface_from_addr(sr, ip_hdr->ip_dst);
+    if (iface_ip != 0) {
+       iface = iface_ip;
+    }
     /* if packet is for our interface */
     if (ip_hdr->ip_dst == iface->ip) {
       /* If the TTL is 0, send an ICMP packet and stop processing the request. */
