@@ -26,7 +26,7 @@
 /** Function declearation goes here */
 int valid_pkt(sr_ip_hdr_t *pkt);
 uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
- sr_ip_hdr_t *ip_hdr, struct sr_if *iface);
+ sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface);
 uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr, 
   sr_ip_hdr_t *ip_hdr, struct sr_if *iface);
 uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac, 
@@ -366,13 +366,13 @@ sr_ethernet_hdr_t *create_icmp_eth_hdr(sr_ip_hdr_t *ip_hdr, struct sr_if *iface)
  * else, return -1. 
  *---------------------------------------------------------------------*/
 uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
- sr_ip_hdr_t *ip_hdr, struct sr_if *iface){
+ sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface){
   /** current router mac address */
-  unsigned char *cur_mac = iface->addr;
+  /*unsigned char *cur_mac = iface->addr;*/
   /** destination mac address - client mac address */
-  unsigned char *dest_mac = eth_hdr->ether_shost;
+  /*unsigned char *dest_mac = eth_hdr->ether_shost;*/
   /** interface name */
-  const char *interface = iface->name;
+  char *interface = iface->name;
   /** source and destination ip address */
   uint32_t ip_dst_add = ip_hdr->ip_dst;
   uint32_t ip_src_add = ip_hdr->ip_src;
@@ -396,27 +396,29 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
         max_mask = mask;
       }
     }
+    rt_walker = rt_walker->next;
   }
   /** there doesn't exists route to destination IP */
   if(gw == 0){
+    create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
     /** Create a ICMP packet of type 3 code 0 ICMP packet */
-    sr_icmp_t3_hdr_t *dest_net_unreach = create_icmp_t3(ICMP_NO_DST, 0, ip_hdr);
+    /*sr_icmp_t3_hdr_t *dest_net_unreach = create_icmp_t3(ICMP_NO_DST, 0, ip_hdr);*/
     /** Create the IP packet */
-    unsigned int ip_len = size_ip + size_icmp_t3;
+    /*unsigned int ip_len = size_ip + size_icmp_t3;
     uint8_t *ip_packet = malloc(ip_len);
     memcpy(ip_packet, ip_hdr, size_ip);
-    memcpy(ip_packet + size_icmp_t3, dest_net_unreach, size_icmp_t3);
+    memcpy(ip_packet + size_icmp_t3, dest_net_unreach, size_icmp_t3);*/
     /** create the ethernet packet */
-    uint8_t *type3_code0_icmp_pkt = create_eth_pkt(cur_mac, dest_mac, 
-      ethertype_ip, ip_packet, ip_len);
+    /*uint8_t *type3_code0_icmp_pkt = create_eth_pkt(cur_mac, dest_mac, 
+      ethertype_ip, ip_packet, ip_len);*/
     /** Create the ethernet header that will wrap this ICMP packet
     sr_ethernet_hdr_t *eth_hdr = create_icmp_eth_hdr(ip_hdr, iface); */
     /** Encapsulate the ICMP packet in a ethernet packet with IP header 
       TODO: CHECK THE CORRECTNESS OF create_icmp_pkt_t3, if it has allocated enough memory for the data
     sr_ethernet_hdr_t *type3_code0_icmp_pkt = create_icmp_pkt_t3(eth_hdr, ip_hdr, dest_net_unreach); */
     /** TODO: check the correctness of pkt_len */
-    unsigned int pkt_len = sizeof(type3_code0_icmp_pkt);
-    sr_send_packet(sr, type3_code0_icmp_pkt, pkt_len, interface);
+    /*unsigned int pkt_len = sizeof(type3_code0_icmp_pkt);
+    sr_send_packet(sr, type3_code0_icmp_pkt, pkt_len, interface);*/
     return -1;
   }
   return (uint32_t)gw;
