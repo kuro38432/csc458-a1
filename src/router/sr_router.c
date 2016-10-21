@@ -25,11 +25,12 @@
 
 /** Function declearation goes here */
 int valid_pkt(sr_ip_hdr_t *pkt);
-uint32_t check_routing_table(struct sr_instance* sr, sr_ip_hdr_t *ip_hdr, 
-      struct sr_if *iface);
-uint8_t updateTTL(sr_ip_hdr_t *ip_hdr);
-/** TODO: fix this! */
-uint32_t update_arp_req(sr_ethernet_hdr_t *eth_arp_request, struct sr_arpreq *arp_req);
+uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
+ sr_ip_hdr_t *ip_hdr, struct sr_if *iface);
+uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr, 
+  sr_ip_hdr_t *ip_hdr, struct sr_if *iface);
+uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac, 
+  uint16_t packet_type, uint8_t *ip_packet, unsigned int ip_len);
 
 
 /*---------------------------------------------------------------------
@@ -96,7 +97,7 @@ void sr_handlepacket(struct sr_instance* sr,
   struct sr_if * iface = sr_get_interface(sr, interface); 
   printf("%s\n", iface->name);
   sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)packet;
-  
+
   /* get ethernet type */
   uint16_t ethtype = ethertype(packet);
   
@@ -104,7 +105,7 @@ void sr_handlepacket(struct sr_instance* sr,
   if (ethtype == ethertype_ip) {
     printf("Received IP packet\n");
     /* extract ip packet and parse ip header */
-    uint8_t * ip_packet = packet + size_ether;
+    uint8_t *ip_packet = packet + size_ether;
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) ip_packet;
     /* if packet is for our interface */
     if (ip_hdr->ip_dst == iface->ip) {
@@ -166,13 +167,16 @@ void sr_handlepacket(struct sr_instance* sr,
        */
       /* If the packet is valid... */
       /**if (valid) { */
+          /** length of the ip packet */ 
+          unsigned int ip_len = len - size_ip;
           /** ARP cache */
           struct sr_arpcache cache = sr->cache;
+          /** current router mac address */
+          unsigned char *cur_mac = iface->addr;
           /** Destination IP address from the routing table */
-          uint32_t ip_dst = check_routing_table(sr, ip_hdr, iface);
+          uint32_t ip_dst = check_routing_table(sr, eth_hdr, ip_hdr, iface);
           /** ARP containing MAC address corresponding to the destionation IP address*/
           struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
-          /** struct sr_if * iface - interface */
 
           /** sanity check fails */
           if(valid_pkt(ip_hdr) == 0){
@@ -182,41 +186,23 @@ void sr_handlepacket(struct sr_instance* sr,
 
           /** TTL > 0, the packet is still alive, 
               from updateTTL(), update TTL and recompute checksum */
-          if(updateTTL(ip_hdr) > 0){
+          if(updateTTL(sr, eth_hdr, ip_hdr, iface) > 0){
             /** MAC address known, send the package */
             if(arp_dest != NULL){
               printf("%s\n", "mac exists in the cache.");
-              /** TODO: encapsulate the arp and send it */
-              /** sr_send_packet(sr, *(arp_dst->ip), len, iface); */
+              /** next hop mac address */
+              unsigned char *next_hop_mac = arp_dest->mac;
+              /* create a ehternet packet with new header */
+              uint8_t *eth_packet = create_eth_pkt(cur_mac, next_hop_mac, 
+                ethertype_ip, ip_packet, ip_len);
+              /** send the packet to the next hop */
+              sr_send_packet(sr, eth_packet, len, interface);
               free(arp_dest);
             }
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
             else{     
-              /** Create the ARP request 
-              TODO: check if I have the correct IP, is it interface IP of 
-              the router that is sending the ARP request? */
-              sr_arp_hdr_t *arp_request = create_arp_request(iface, iface->ip);
-              /** Create the ethernet packet that wraps the ARP request */
-              sr_ethernet_hdr_t *eth_arp_request = create_arp_req_eth(arp_request);
-              /** TODO: send the ARP request for the next-hop IP EVERY SECOND */
-              /** TODO: how to calculate the ARP length package length?? */
-              unsigned int eth_arp_req_len = size_ether + size_ip + sizeof(sr_arp_hdr_t);
-              /** TODO: update the times sent of the packet 
-              update_arp_req(eth_arp_request); */
-              /** send the ARP ethernet packet */
-              sr_send_packet(sr, (uint8_t *)eth_arp_request, eth_arp_req_len, interface);
-              
-              /** queue the packet */
-              struct sr_arpreq *queue_request = sr_arpcache_queuereq(&cache, ip_dst, 
-                (uint8_t *)eth_arp_request, eth_arp_req_len, interface);
-              free(eth_arp_request);
-
-              /** Not sure if this part is still needed, appears in handle_arpreq 
-              if(queue_request->times_sent > 5){
-                //TODO: icmp code for too many arp request sent
-                create_icmp(ip_protocol_icmp, icmp_code);
-              }
-              */
+              /** queue the raw ethernet packet we recieved */
+              sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
             }
           }
           /** TTL < 0, do nothing and drop the packet */
@@ -317,6 +303,30 @@ int valid_pkt(sr_ip_hdr_t *pkt) {
   return ret_val;
 } /* end valid_pkt */
 
+
+/*---------------------------------------------------------------------
+ * Method: uint8_t *create_eth_pkt(uint8_t src_mac, uint8_t dest_mac, 
+  uint16_t packet_type, uint8_t *ip_packet, unsigned int ip_len)
+ * Scope: local
+ *
+ * Return a pointer to a ethernet packet that is newly created 
+ *---------------------------------------------------------------------*/
+uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac, 
+  uint16_t packet_type, uint8_t *ip_packet, unsigned int ip_len){
+  /** create a new ethernet header */
+  sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *) malloc(size_ether);
+  eth_hdr->ether_dhost[ETHER_ADDR_LEN] = *src_mac;
+  eth_hdr->ether_shost[ETHER_ADDR_LEN] = *dest_mac;
+  eth_hdr->ether_type = packet_type;
+  /** create the header with the ip packet in it */
+  uint8_t *eth_pkt = malloc(size_ether + ip_len);
+  /** copy the content in ethernet header over to the ethernet packet */
+  memcpy(eth_pkt, eth_hdr, size_ether);
+  /** copy the content in ip packet over to the ethernet packet */
+  memcpy(eth_pkt + size_ether, ip_packet, ip_len);
+  return eth_pkt;
+}
+
 /*---------------------------------------------------------------------
  * Method: create_icmp_eth_hdr(sr_ip_hdr_t *ip_hdr, struct sr_if *iface)
  * Scope: local
@@ -345,12 +355,20 @@ sr_ethernet_hdr_t *create_icmp_eth_hdr(sr_ip_hdr_t *ip_hdr, struct sr_if *iface)
  * if the destination exists, return the gateway of the address, 
  * else, return -1. 
  *---------------------------------------------------------------------*/
-uint32_t check_routing_table(struct sr_instance* sr, sr_ip_hdr_t *ip_hdr, 
-      struct sr_if *iface){
+uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
+ sr_ip_hdr_t *ip_hdr, struct sr_if *iface){
+  /** current router mac address */
+  unsigned char *cur_mac = iface->addr;
+  /** destination mac address - client mac address */
+  unsigned char *dest_mac = eth_hdr->ether_shost;
+  /** interface name */
+  const char *interface = iface->name;
+  /** source and destination ip address */
   uint32_t ip_dst_add = ip_hdr->ip_dst;
   uint32_t ip_src_add = ip_hdr->ip_src;
+  /** routing table */
   struct sr_rt* rt_walker = sr->routing_table;
-  const char *interface = iface->name;
+  
   unsigned long max_mask = 0;
   unsigned long gw = 0;
   unsigned long mask = 0;
@@ -373,22 +391,29 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ip_hdr_t *ip_hdr,
   if(gw == 0){
     /** Create a ICMP packet of type 3 code 0 ICMP packet */
     sr_icmp_t3_hdr_t *dest_net_unreach = create_icmp_t3(ICMP_NO_DST, 0, ip_hdr);
-    /** Create the ethernet header that will wrap this ICMP packet */
-    sr_ethernet_hdr_t *eth_hdr = create_icmp_eth_hdr(ip_hdr, iface);
+    /** Create the IP packet */
+    unsigned int ip_len = size_ip + size_icmp_t3;
+    uint8_t *ip_packet = malloc(ip_len);
+    memcpy(ip_packet, ip_hdr, size_ip);
+    memcpy(ip_packet + size_icmp_t3, dest_net_unreach, size_icmp_t3);
+    /** create the ethernet packet */
+    uint8_t *type3_code0_icmp_pkt = create_eth_pkt(cur_mac, dest_mac, 
+      ethertype_ip, ip_packet, ip_len);
+    /** Create the ethernet header that will wrap this ICMP packet
+    sr_ethernet_hdr_t *eth_hdr = create_icmp_eth_hdr(ip_hdr, iface); */
     /** Encapsulate the ICMP packet in a ethernet packet with IP header 
       TODO: CHECK THE CORRECTNESS OF create_icmp_pkt_t3, if it has allocated enough memory for the data
-    */
-    sr_ethernet_hdr_t *type3_code0_icmp_pkt = create_icmp_pkt_t3(eth_hdr, ip_hdr, dest_net_unreach);
+    sr_ethernet_hdr_t *type3_code0_icmp_pkt = create_icmp_pkt_t3(eth_hdr, ip_hdr, dest_net_unreach); */
     /** TODO: check the correctness of pkt_len */
     unsigned int pkt_len = sizeof(type3_code0_icmp_pkt);
-    sr_send_packet(sr, (uint8_t *)type3_code0_icmp_pkt, pkt_len, interface);
+    sr_send_packet(sr, type3_code0_icmp_pkt, pkt_len, interface);
     return -1;
   }
   return (uint32_t)gw;
 }
 
 /*---------------------------------------------------------------------
- * Method: updateTTL(uint8_t *ip_hdr)
+ * Method: updateTTL(uint8_t *ip_hdr, struct sr_if *iface)
  * Scope: local
  *
  * Returns: the TTL of the ip packet
@@ -397,48 +422,43 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ip_hdr_t *ip_hdr,
  * to redo the header.
  * TODO: check if header is redone correctly
  *---------------------------------------------------------------------*/
-uint8_t updateTTL(sr_ip_hdr_t *ip_hdr){
+uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr, 
+  sr_ip_hdr_t *ip_hdr, struct sr_if *iface){
+  /** current router mac address */
+  unsigned char *cur_mac = iface->addr;
+  /** destination mac address - client mac address */
+  unsigned char *dest_mac = eth_hdr->ether_shost;
+  /** the interface name of which the packet will be sent*/
+  const char *interface = iface->name;
   /** time to live of the packet */
   uint8_t ttl = ip_hdr->ip_ttl;
   /** header length */
   uint16_t hdr_len = ip_hdr->ip_len;
-  /** checksum of the id_hdr */
-  uint16_t checksum = ip_hdr->ip_sum;
+  /** new checksum after ttl is updated*/
   uint16_t new_sum;
 
   /** reduce TTL by 1 */
   ttl -= 1;
   /** recalculate checksum */
   new_sum = cksum(ip_hdr, hdr_len);
-  checksum = new_sum;
+  /** update the checksum of the id_hdr */
+  ip_hdr->ip_sum = new_sum;
 
   /** if TTL reaches 0, send ICMP time exceed */
   if(ttl == 0){
-    /** create ICMP packet of type 11, code 0 
-    create_icmp(ip_protocol_icmp, icmp_code);*/
+    /** Create a ICMP packet of type 11 code 0 ICMP packet */
+    sr_icmp_t3_hdr_t *time_exceed = create_icmp_t3(ICMP_TIME_EXCEED, 0, ip_hdr);
+    /** Create the IP packet */
+    unsigned int ip_len = size_ip + size_icmp_t3;
+    uint8_t *ip_packet = malloc(ip_len);
+    memcpy(ip_packet, ip_hdr, size_ip);
+    memcpy(ip_packet + size_icmp_t3, time_exceed, size_icmp_t3);
+    /** create the ethernet packet */
+    uint8_t *type11_code0_icmp_pkt = create_eth_pkt(cur_mac, dest_mac, 
+      ethertype_ip, ip_packet, ip_len);
+    unsigned int pkt_len = sizeof(type11_code0_icmp_pkt);
+    sr_send_packet(sr, (uint8_t *)type11_code0_icmp_pkt, pkt_len, interface);
     return -1;
   }
   return ttl;
-}
-
-/*---------------------------------------------------------------------
- * Method: update_arp_req(struct sr_arpreq *arp_req)
- * Scope: local
- *
- * Returns: the number of times an ARP request has been sent. 
- *
- * The method updates times_send by increamenting 1 every time 
- * the request is sent.
- *---------------------------------------------------------------------*/
-uint32_t update_arp_req(sr_ethernet_hdr_t *eth_arp_request, struct sr_arpreq *arp_req){
-  /** extract the arp request */
-  /** when you creat ARP request, what goes after the header?? 
-      Given a ethernet packet that's wrapping the ARP request, 
-      how do I find the ARP request?? */
-   /** uint8_t arp_header = (uint8_t)eth_arp_request + sizeof(sr_ethernet_hdr_t *) + sizeof(sr_ip_hdr_t *);
-       struct sr_arpreq *arp_req = (struct sr_arpreq *) arp_header; */
-
-  uint32_t times_sent = arp_req->times_sent;
-  times_sent -= 1;
-  return times_sent;
 }
