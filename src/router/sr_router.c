@@ -213,6 +213,7 @@ void sr_handlepacket(struct sr_instance* sr,
             else{     
               /** queue the raw ethernet packet we recieved */
               sr_arpcache_queuereq(&cache, ip_dst, packet, len, interface);
+              handle_arpreq(req, sr);
             }
           }
           /** TTL < 0, do nothing and drop the packet */
@@ -379,25 +380,27 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
   /** routing table */
   struct sr_rt* rt_walker = sr->routing_table;
   
-  unsigned long max_mask = 0;
-  unsigned long gw = 0;
-  unsigned long mask = 0;
-  unsigned long dest = 0;
-  unsigned long temp = 0;
+  uint32_t max_mask = 0;
+  uint32_t gw = 0;
+  uint32_t mask = 0;
+  uint32_t dest = 0;
+  uint32_t temp = 0;
 
   while(rt_walker->next){
     mask = rt_walker->mask.s_addr;
     dest = rt_walker->dest.s_addr;
     /** Avoid finding the source IP address as the next hop IP */
-    if(dest != ip_src_add){
-      temp = ip_dst_add & mask;
-      if(temp == dest && mask > max_mask){
-        gw = rt_walker->gw.s_addr;
-        max_mask = mask;
-      }
+    temp = ip_dst_add & mask;
+    dest = dest & mask;
+    if(temp == dest && mask > max_mask){
+      printf("found match");
+      gw = rt_walker->gw.s_addr;
+      print_addr_ip_int(gw);
+      max_mask = mask;
     }
     rt_walker = rt_walker->next;
   }
+
   /** there doesn't exists route to destination IP */
   if(gw == 0){
     create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
@@ -421,7 +424,7 @@ uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr
     sr_send_packet(sr, type3_code0_icmp_pkt, pkt_len, interface);*/
     return -1;
   }
-  return (uint32_t)gw;
+  return gw;
 }
 
 /*---------------------------------------------------------------------
