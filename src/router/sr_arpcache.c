@@ -32,6 +32,10 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       struct sr_packet *pkt;
       for(pkt = req->packets; pkt != NULL; pkt = pkt->next) {
          /* TODO: make ICMP packet, wrap in IP and Ethernet, send back to sender */
+	 sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)pkt;
+         sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *)(pkt + size_ether);
+         struct sr_if * iface = sr_get_interface_from_addr(sr, ip_hdr->ip_dst);
+         create_and_send_icmp(3, 1, ip_hdr, eth_hdr, sr, ip_hdr->ip_len + size_ether, iface->name);
       }
       sr_arpreq_destroy(&sr->cache, req);
     } else {
