@@ -24,13 +24,6 @@
 #include "sr_utils.h"
 
 /** Function declearation goes here */
-int valid_pkt(sr_ip_hdr_t *pkt);
-uint32_t check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr,
- sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface);
-uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr, 
-  sr_ip_hdr_t *ip_hdr, struct sr_if *iface);
-uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac, 
-  uint16_t packet_type, uint8_t *ip_packet, unsigned int ip_len);
 
 
 /*---------------------------------------------------------------------
@@ -151,12 +144,26 @@ void sr_handlepacket(struct sr_instance* sr,
           
           /* Create ethernet frame. */
           sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt(eth_hdr, ip_rsp_hdr, icmp_hdr, icmp_len);
+          
+          struct sr_arpcache cache = sr->cache;
+          uint32_t ip_dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, size_ether + size_ip + icmp_len, iface);
+          struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
+          if (arp_dest != NULL) {
+            memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
+            sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, iface->name);
+            free(ip_rsp_hdr);
+            free(icmp_hdr);
+            free(eth_rsp_hdr);
+          } else {
+            struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, size_ether + size_ip + icmp_len, iface->name);
+            handle_arpreq(req, sr);
+          }
 
-          sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); 
+          /*sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); */
          
           /* Free ICMP header. */ 
-          free(ip_rsp_hdr); 
-          free(eth_rsp_hdr);
+          /*free(ip_rsp_hdr); 
+          free(eth_rsp_hdr);*/
         } /* end if (icmp_hdr->icmp_type == 8) - echo request */
 
       /* TCP/UDP: if packet contains TCP(code=6)/UDP(code=17) payload */
