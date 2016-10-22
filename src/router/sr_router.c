@@ -150,32 +150,34 @@ void sr_handlepacket(struct sr_instance* sr,
          
           /* Find the longest prefix match in the routing table to get next hop IP address. */ 
           struct sr_arpcache cache = sr->cache;
-          struct sr_rt * dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, size_ether + size_ip + icmp_len, iface);
-          uint32_t ip_dst = dst->gw.s_addr;
-          /* Look up ip_dst in the cache. */
-          struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
-          struct sr_if *next_hop_iface = sr_get_interface(sr, dst->interface);
-          if (arp_dest != NULL) {
-            printf("===============entered cache ===============\n");
-            memcpy(eth_rsp_hdr->ether_shost, next_hop_iface->addr, ETHER_ADDR_LEN);
-            memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
-            sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, dst->interface);
-            free(ip_rsp_hdr);            
-            free(eth_rsp_hdr);
-          } else {
-            /* Create the ARP request. */
-            sr_arp_hdr_t * arp_req = create_arp_request(next_hop_iface, dst->gw.s_addr);
-            sr_ethernet_hdr_t * eth_req = create_arp_req_eth(arp_req);
+          struct sr_rt * dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, size_ether + size_ip + icmp_len, iface); 
+          if (dst) {
+            uint32_t ip_dst = dst->gw.s_addr;
+            /* Look up ip_dst in the cache. */
+            struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
+            struct sr_if *next_hop_iface = sr_get_interface(sr, dst->interface);
+            if (arp_dest != NULL) {
+              printf("===============entered cache ===============\n");
+              memcpy(eth_rsp_hdr->ether_shost, next_hop_iface->addr, ETHER_ADDR_LEN);
+              memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
+              sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, dst->interface);
+              free(ip_rsp_hdr);            
+              free(eth_rsp_hdr);
+            } else {
+              /* Create the ARP request. */
+              sr_arp_hdr_t * arp_req = create_arp_request(next_hop_iface, dst->gw.s_addr);
+              sr_ethernet_hdr_t * eth_req = create_arp_req_eth(arp_req);
 
-            /* Send the ARP req. */
-            sr_send_packet(sr, (uint8_t *)eth_req, size_ether+sizeof(sr_arp_hdr_t),dst->interface);
+              /* Send the ARP req. */
+              sr_send_packet(sr, (uint8_t *)eth_req, size_ether+sizeof(sr_arp_hdr_t),dst->interface);
 
-            /* We want to send a request for the next-hop IP address, not our final destination. */
-            /* Queue the arp req. */
-            /*TODO: do I actually need to call ntohl(ip_dst)? */
-            struct sr_arpreq *req = sr_arpcache_queuereq(&(sr->cache), ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,dst->interface);
-          } /* end of sending ARP request if next-hop is not cached. */
-
+              /* We want to send a request for the next-hop IP address, not our final destination. */
+              /* Queue the arp req. */
+              /*TODO: do I actually need to call ntohl(ip_dst)? */
+              struct sr_arpreq *req = sr_arpcache_queuereq(&(sr->cache), ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,dst->interface);
+          
+            } /* end of sending ARP request if next-hop is not cached. */
+          } /* end of if (dst) */
           /* Free ICMP header. */ 
           free(ip_rsp_hdr); 
           free(eth_rsp_hdr);
@@ -198,37 +200,39 @@ void sr_handlepacket(struct sr_instance* sr,
       struct sr_arpcache cache = sr->cache;
       /** Destination IP address from the routing table */
       struct sr_rt * dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
-      uint32_t ip_dst = dst->gw.s_addr;
-      /** ARP containing MAC address corresponding to the destionation IP address*/
-      struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
+      if (dst) {
+        uint32_t ip_dst = dst->gw.s_addr;
+        /** ARP containing MAC address corresponding to the destionation IP address*/
+        struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
 
-      /** sanity check fails */
-      if(valid_pkt(ip_hdr) == 0){
-        printf("%s\n", "sanity check fails");
-        /** TODO: send ICMP to host notify the error. */
-      }         
+        /** sanity check fails */
+        if(valid_pkt(ip_hdr) == 0){
+          printf("%s\n", "sanity check fails");
+          /** TODO: send ICMP to host notify the error. */
+        }         
           /** TTL > 0, the packet is still alive, 
               from updateTTL(), update TTL and recompute checksum */
-      if(updateTTL(sr, eth_hdr, ip_hdr, len, iface) > 0){
-        /** MAC address known, send the package */
-        if(arp_dest != NULL){
-          /** next hop mac address */
-          unsigned char *next_hop_mac = arp_dest->mac;
-          struct sr_if * pkt_iface = sr_get_interface(sr, dst->interface);
-          /* create a ehternet packet with new header */
-          uint8_t *eth_packet = create_eth_pkt(pkt_iface->addr, next_hop_mac, 
-          ethertype_ip, ip_packet, ip_len);
-          /** send the packet to the next hop */
-          sr_send_packet(sr, eth_packet, len, dst->interface);
-          free(arp_dest);
-        } else {
-          /** MAC address unknown, send an ARP requst, add the packet to the queue */
-          /** queue the raw ethernet packet we recieved */
-          struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), packet, len, dst->interface);
-          handle_arpreq(req, sr); 
-        } /* end of checking whether ARP destination is null. */
-      } /* end of updating TTL */
+        if(updateTTL(sr, eth_hdr, ip_hdr, len, iface) > 0){
+          /** MAC address known, send the package */
+          if(arp_dest != NULL){
+            /** next hop mac address */
+            unsigned char *next_hop_mac = arp_dest->mac;
+            struct sr_if * pkt_iface = sr_get_interface(sr, dst->interface);
+            /* create a ehternet packet with new header */
+            uint8_t *eth_packet = create_eth_pkt(pkt_iface->addr, next_hop_mac, 
+            ethertype_ip, ip_packet, ip_len);
+            /** send the packet to the next hop */
+            sr_send_packet(sr, eth_packet, len, dst->interface);
+            free(arp_dest);
+          } else {
+            /** MAC address unknown, send an ARP requst, add the packet to the queue */
+            /** queue the raw ethernet packet we recieved */
+            struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), packet, len, dst->interface);
+            handle_arpreq(req, sr); 
+          } /* end of checking whether ARP destination is null. */
+        } /* end of updating TTL */
           /** TTL < 0, do nothing and drop the packet */
+      }
     } /* end else packet is not for our interface. */
     
   /* ARP: if packet contains a arp packet, it may or may not be for our interface - need to check */
@@ -394,8 +398,9 @@ struct sr_rt* check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * et
   struct sr_rt* to_return = NULL;
   while(rt_walker->next){
     mask = rt_walker->mask.s_addr;
-    dest = rt_walker->dest.s_addr;
+    dest = rt_walker->dest.s_addr; 
     /** Avoid finding the source IP address as the next hop IP */
+
     temp = ip_dst_add & mask;
     dest = dest & mask;
     if(temp == dest && mask > max_mask){
@@ -403,12 +408,12 @@ struct sr_rt* check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * et
       max_mask = mask;
     }
     rt_walker = rt_walker->next;
-  }
+  } 
   /** there doesn't exists route to destination IP */
   if(to_return == NULL){
     printf("======== No destination in routing table =========\n");
-    uint8_t *pkt = create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
-    print_hdr_eth(pkt);
+    create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
+    /* print_hdr_eth(pkt); */
   }
   return to_return;
 }
