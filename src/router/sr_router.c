@@ -148,12 +148,13 @@ void sr_handlepacket(struct sr_instance* sr,
          
           /* Find the longest prefix match in the routing table to get next hop IP address. */ 
           struct sr_arpcache cache = sr->cache;
-          uint32_t ip_dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, size_ether + size_ip + icmp_len, iface);
+          struct sr_rt * dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, size_ether + size_ip + icmp_len, iface);
+          uint32_t ip_dst = dst->gw.s_addr;
           /* Look up ip_dst in the cache. */
           struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
           if (arp_dest != NULL) {
             memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
-            sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, iface->name);
+            sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, dst->interface);
             free(ip_rsp_hdr);
             free(icmp_hdr);
             free(eth_rsp_hdr);
@@ -161,7 +162,7 @@ void sr_handlepacket(struct sr_instance* sr,
             /* We want to send a request for the next-hop IP address, not our final destination. */
             printf("Just queued something on to the ARP:\n");
             print_addr_ip_int(ntohl(ip_dst));
-            struct sr_arpreq *req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,iface->name);
+            struct sr_arpreq *req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,dst->interface);
             if (req) { printf("yes we did the queue\n"); }else{ printf("no we did not\n");}
             printf("======================================\n");
             handle_arpreq(req, sr); 
@@ -200,7 +201,8 @@ void sr_handlepacket(struct sr_instance* sr,
           /** current router mac address */
           unsigned char *cur_mac = iface->addr;
           /** Destination IP address from the routing table */
-          uint32_t ip_dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
+          struct sr_rt * dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
+          uint32_t ip_dst = dst->gw.s_addr;
           /** ARP containing MAC address corresponding to the destionation IP address*/
           struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
 
@@ -220,14 +222,14 @@ void sr_handlepacket(struct sr_instance* sr,
               uint8_t *eth_packet = create_eth_pkt(cur_mac, next_hop_mac, 
                 ethertype_ip, ip_packet, ip_len);
               /** send the packet to the next hop */
-              sr_send_packet(sr, eth_packet, len, iface->name);
+              sr_send_packet(sr, eth_packet, len, dst->interface);
               free(arp_dest);
             }
             /** MAC address unknown, send an ARP requst, add the packet to the queue */
             else{
               /** queue the raw ethernet packet we recieved */
                
-              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, iface->name);
+              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_dst, packet, len, dst->interface);
               handle_arpreq(req, sr); 
             }
           }
