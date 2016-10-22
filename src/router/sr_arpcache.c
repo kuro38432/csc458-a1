@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -42,15 +43,12 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
     } else {
       char * interface = req->packets->iface;
       struct sr_if *iface = sr_get_interface(sr, interface);
+      printf("checking iface\n");
+      assert(iface);
       /* send arp request for this sr_arpreq */
-      printf("INTERFACE BEING USED TO CREATE ARP REQ: %s\n", iface->name);
       print_addr_eth(iface->addr);
       sr_arp_hdr_t * tosend_arp = create_arp_request(iface, ntohl(req->ip));
       sr_ethernet_hdr_t * tosend_eth = create_arp_req_eth(tosend_arp);
-      printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-      printf("GOING TO SEND THIS OUT FROM ARPCACHE.C - initial ARP req\n");
-      print_hdrs((uint8_t *)tosend_eth, 42);
-      printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
       sr_send_packet(sr, (uint8_t*)tosend_eth, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), interface);
       req->sent = now;
       req->times_sent++;
@@ -147,21 +145,17 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
                                      unsigned char *mac,
                                      uint32_t ip)
 {
-    printf("Inserting ARPCACHE stuff\n");
     pthread_mutex_lock(&(cache->lock));
+
+    printf("WE WANT TO INSERT THIS INTO THE CACHE\n");
+    print_addr_ip_int(ip);
     
-    if (cache->requests) {
-      printf("cache->requests\n");
-    }
-    if (cache) {
-      printf("cache\n");
-    }
-   
     struct sr_arpreq *req, *prev = NULL, *next = NULL; 
     for (req = cache->requests; req != NULL; req = req->next) {
         printf("Entered cache loop\n");
         print_addr_ip_int(req->ip);
         if (req->ip == ip) {            
+            printf("We found the req\n");
             if (prev) {
                 next = req->next;
                 prev->next = next;
@@ -175,7 +169,6 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
         }
         prev = req;
     }
-    printf("I FINISHED FIRST LOOPING. \n");
     int i;
     for (i = 0; i < SR_ARPCACHE_SZ; i++) {
       printf(" ENTER SECOND LOOP.\n");
