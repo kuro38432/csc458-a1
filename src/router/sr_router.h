@@ -94,7 +94,7 @@ sr_ethernet_hdr_t * create_arp_eth(struct sr_if *iface, sr_arp_hdr_t *arp_hdr, s
 sr_ethernet_hdr_t * create_arp_req_eth(sr_arp_hdr_t *tosend_arp);
 sr_ip_hdr_t * create_ip(sr_ip_hdr_t * ip_hdr);
 sr_ethernet_hdr_t * create_icmp_pkt_t3(sr_ethernet_hdr_t * eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_t3_hdr_t * icmp_hdr);
-sr_ethernet_hdr_t * create_icmp_pkt(sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len);
+sr_ethernet_hdr_t * create_icmp_pkt(struct sr_if *iface,sr_ethernet_hdr_t *eth_hdr, sr_ip_hdr_t * ip_hdr, sr_icmp_hdr_t * icmp_hdr, int icmp_len);
 uint8_t * create_and_send_icmp(uint8_t type, uint8_t code, sr_ip_hdr_t *ip_hdr, sr_ethernet_hdr_t *eth_hdr, struct sr_instance *sr, int len, char *interface);
 
 #endif /* SR_ROUTER_H */

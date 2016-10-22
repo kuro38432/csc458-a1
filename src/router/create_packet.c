@@ -175,7 +175,8 @@ sr_ip_hdr_t *create_ip(sr_ip_hdr_t * ip_hdr) {
 sr_ethernet_hdr_t * create_icmp_pkt_t3
   (  sr_ethernet_hdr_t * eth_hdr, 
      sr_ip_hdr_t * ip_hdr, 
-     sr_icmp_t3_hdr_t * icmp_hdr ) 
+     sr_icmp_t3_hdr_t * icmp_hdr
+) 
 {
   sr_ethernet_hdr_t * ether_rsp_hdr = \
     (sr_ethernet_hdr_t *) malloc(size_ether + size_ip + size_icmp_t3);
@@ -186,8 +187,10 @@ sr_ethernet_hdr_t * create_icmp_pkt_t3
   memcpy(((uint8_t *) ether_rsp_hdr) + size_ether, (uint8_t *)ip_hdr, size_ip);
 
   /* Fill in the ethernet header. */
-  memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN);
-  memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
+  /* memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN); 
+  
+
+  memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN); */
   ether_rsp_hdr->ether_type = ntohs(ethertype_ip);
   return ether_rsp_hdr;
 }
@@ -202,7 +205,8 @@ sr_ethernet_hdr_t * create_icmp_pkt_t3
  *
  *---------------------------------------------------------------------*/
 sr_ethernet_hdr_t *create_icmp_pkt
-  ( sr_ethernet_hdr_t * eth_hdr, 
+  ( struct sr_if* iface, 
+    sr_ethernet_hdr_t * eth_hdr, 
     sr_ip_hdr_t * ip_hdr, 
     sr_icmp_hdr_t * icmp_hdr, 
     int icmp_len) 
@@ -216,8 +220,10 @@ sr_ethernet_hdr_t *create_icmp_pkt
            (uint8_t *)ip_hdr, size_ip);
 
   /* Fill in the ethernet header. */
-  memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN);
-  memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
+  /* memcpy(ether_rsp_hdr->ether_shost, eth_hdr->ether_dhost, ETHER_ADDR_LEN); */
+  printf("CREATE ICMP: %s\n", iface->name);
+  memcpy(ether_rsp_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN); 
+  memcpy(ether_rsp_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN); 
   ether_rsp_hdr->ether_type = ntohs(ethertype_ip);
   return ether_rsp_hdr;
 }

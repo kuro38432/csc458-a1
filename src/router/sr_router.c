@@ -79,10 +79,10 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(packet);
   assert(interface);
 
-  /**
+  
   printf("*** -> Received packet of length %d \n",len);
-  printf("Interface: %s\n", interface);
-  print_hdrs((uint8_t *)packet, len); */
+  /* printf("Interface: %s\n", interface); */
+ print_hdrs((uint8_t *)packet, len);
 
   /* fill in code here */
   /* useful structs */
@@ -109,6 +109,7 @@ void sr_handlepacket(struct sr_instance* sr,
     if (iface_ip != 0) {
        iface = iface_ip;
     }
+    printf("Interface: %s\n", iface->name);
     /* if packet is for our interface */
     if (ip_hdr->ip_dst == iface->ip) {
       /* If the TTL is 0, send an ICMP packet and stop processing the request. */
@@ -142,23 +143,33 @@ void sr_handlepacket(struct sr_instance* sr,
           sr_ip_hdr_t *ip_rsp_hdr = create_ip(ip_hdr);
           
           /* Create ethernet frame. */
-          sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt(eth_hdr, ip_rsp_hdr, icmp_hdr, icmp_len);
-          
+          sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp_pkt(iface, eth_hdr, ip_rsp_hdr, icmp_hdr, icmp_len);
+         
+          /* Find the longest prefix match in the routing table to get next hop IP address. */ 
           struct sr_arpcache cache = sr->cache;
           uint32_t ip_dst = check_routing_table(sr, eth_rsp_hdr, ip_rsp_hdr, size_ether + size_ip + icmp_len, iface);
+          printf("IP_DST:\n");
+          print_addr_ip_int(ntohl(ip_dst));
+          /* Look up ip_dst in the cache. */
           struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
           if (arp_dest != NULL) {
             memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
+            printf("SEND A PACKET BECAUSE WE FOUND THE ADDR IN CACHE.\n");
             sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, iface->name);
             free(ip_rsp_hdr);
             free(icmp_hdr);
             free(eth_rsp_hdr);
           } else {
-            struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, size_ether + size_ip + icmp_len, iface->name);
+
+/*
+            struct sr_arpreq *req = sr_arpcache_queuereq(&cache, ip_rsp_hdr->ip_dst, (uint8_t *)eth_rsp_hdr, size_ether + size_ip + icmp_len, iface->name); */
+            /* We want to send a request for the next-hop IP address, not our final destination. */
+            printf("INTERFACE USED FOR QUEUEING %s\n", iface->name);
+            struct sr_arpreq *req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,iface->name);
             handle_arpreq(req, sr);
           }
 
-          /*sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); */
+          /* sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); */
          
           /* Free ICMP header. */ 
           /*free(ip_rsp_hdr); 
@@ -217,6 +228,7 @@ void sr_handlepacket(struct sr_instance* sr,
               uint8_t *eth_packet = create_eth_pkt(cur_mac, next_hop_mac, 
                 ethertype_ip, ip_packet, ip_len);
               /** send the packet to the next hop */
+              printf("SEND A PACKET TO NEXT HOP IF THE TTL IS GREATER THAN 0\n");
               sr_send_packet(sr, eth_packet, len, iface->name);
               free(arp_dest);
             }
@@ -234,67 +246,58 @@ void sr_handlepacket(struct sr_instance* sr,
             }
           }
           /** TTL < 0, do nothing and drop the packet */
-      }
+      } /* end else packet is not for our interface. */
     
   /* ARP: if packet contains a arp packet */
   } else if (ethtype == ethertype_arp) {
     /* extract arp packet and parse arp header */
     uint8_t * arp_packet = packet + sizeof(sr_ethernet_hdr_t);
     sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) arp_packet;
-    /* ARP REQUEST: if this is an arp request */
-    if (ntohs(arp_hdr->ar_op) == arp_op_request) {
+    /* Get interface from address. */
+    struct sr_if *our_iface = sr_get_interface_from_addr(sr, arp_hdr->ar_tip);
+    printf("our_iface: %s\n", our_iface->name);
+    /* ARP REQUEST: if this is an arp request and directed to our interface, we can reply*/
+    /* We don't have to reply to requests that are not made to our interface. */
+    if ((ntohs(arp_hdr->ar_op) == arp_op_request)) {
+      printf("arp_hdr->ar_tip:\n");
+      print_addr_ip_int(arp_hdr->ar_tip);
       /* send arp reply to sending host */
-      /* create an arp packet & fill in information 
-      sr_arp_hdr_t * tosend_arp = (sr_arp_hdr_t *) malloc(sizeof(sr_arp_hdr_t));
-      tosend_arp->ar_hrd = ntohs(arp_hrd_ethernet);
-      tosend_arp->ar_pro = ntohs(ethertype_ip);
-      tosend_arp->ar_hln = ETHER_ADDR_LEN;
-      tosend_arp->ar_pln = 4;
-      tosend_arp->ar_op = ntohs(arp_op_reply);
-      memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
-      memcpy(tosend_arp->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
-      tosend_arp->ar_sip = iface->ip;
-      tosend_arp->ar_tip = arp_hdr->ar_sip;
-
-      TODO: RENATA PUT THIS COMMENTED SECTION IN CREATE_ARP FUNCTION BELOW
-      */
+      printf("Using iface: %s to create the ARP reply packet.\n", iface->name);
       sr_arp_hdr_t *tosend_arp = create_arp(iface, arp_hdr);
       /* create an ethernet packet & copy the arp packet into it */
-/*
-      sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *) malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-      memcpy(((uint8_t *)tosend_eth) + sizeof(sr_ethernet_hdr_t), (uint8_t *)tosend_arp, sizeof(sr_arp_hdr_t)); */
-      /* fill in ethernet header */
-/*
-      memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
-      memcpy(tosend_eth->ether_shost, iface->addr, ETHER_ADDR_LEN);
-      tosend_eth->ether_type = ntohs(ethertype_arp);
-
-      TODO: RENATA PUT THE CREATION OF ETHERNET PACKET IN FUNCTION BELOW
-      */
       sr_ethernet_hdr_t *tosend_eth = create_arp_eth(iface, arp_hdr, tosend_arp);
+/*
+      printf("========================================================================\n");
+      printf("GOING TO SEND THIS ARP OUT\n");
+      print_hdrs((uint8_t *)tosend_eth, 42); */
       /* send packet */
+      printf("SEND ARP REPLY PACKET\n");
       sr_send_packet(sr, (uint8_t *)tosend_eth, len, interface);
       /* free all memory allocated */
       free(tosend_arp);
       free(tosend_eth);
     /* ARP REPLY: if this is an arp reply */
     } else if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
+      /* printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+      printf("I RECEIVED ARP REPLY.\n");
+      print_hdrs((uint8_t *)eth_hdr, 42); */
       /* Cache IP-MAC mapping */
       struct sr_arpreq * arpreq = sr_arpcache_insert(&sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
       if (arpreq) {
+        printf("We found the arpreq!\n");
         struct sr_packet *pkt;
         for(pkt = arpreq->packets; pkt != NULL; pkt = pkt->next) {
           /* fill in destination MAC addr */
           sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *)pkt;
           memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
           /* send packet */
+          printf("SEND ARP REQUEST PACKET.\n");
           sr_send_packet(sr, (uint8_t *)tosend_eth, pkt->len, pkt->iface);
         }
-        sr_arpreq_destroy(&sr->cache, arpreq);
+        /* sr_arpreq_destroy(&sr->cache, arpreq); */
       }
     /* ERROR: if this is neither an arp request or reply */
     } else {
-      /* ignore packet */
     }
   /* ERROR: if the packet contains something other than arp or ip */
   } else {
@@ -518,8 +521,8 @@ void print_arp_req(struct sr_arpreq *arpreq){
   for(cur = arpreq; cur!=NULL; cur = cur->next){
     printf("======== ip: ");
     printf("%d\n", cur->ip);
-    //print_addr_ip_int(cur->ip);
-    printf("sent: %d, times sent: %d\n", cur->sent, cur->times_sent);
+    /* print_addr_ip_int(cur->ip); */
+    /* printf("sent: %d, times sent: %d\n", cur->sent, cur->times_sent); */
     struct sr_packet *pkts;
     for(pkts = cur->packets; pkts != NULL; pkts = pkts->next){
       print_hdr_eth(pkts->buf);
