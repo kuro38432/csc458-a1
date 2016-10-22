@@ -105,7 +105,7 @@ void sr_handlepacket(struct sr_instance* sr,
                         address and switches it with the current iface if it exists.
                         not sure if this is what we should do, but know ping and traceroute
                         works for the other interfaces too. */
-    print_addr_ip_int(ntohl(ip_hdr->ip_dst));
+    /* print_addr_ip_int(ntohl(ip_hdr->ip_dst));*/
     struct sr_if * iface_ip = sr_get_interface_from_addr(sr, ip_hdr->ip_dst);
     /*if (iface_ip != 0) {
        iface = iface_ip;
@@ -115,6 +115,7 @@ void sr_handlepacket(struct sr_instance* sr,
     if (iface_ip) {
       /* If the TTL is 0, send an ICMP packet and stop processing the request. */
       if(ip_hdr->ip_ttl == 0) {
+        /* TODO: fix this later. */
         create_and_send_icmp(ICMP_TIME_EXCEED, 0, ip_hdr, eth_hdr, sr, len, iface->name);
       } /* end of TTL exceed: if(ip_hdr->ip_ttl == 0) */
 
@@ -137,7 +138,6 @@ void sr_handlepacket(struct sr_instance* sr,
           icmp_hdr->icmp_sum = 0;
 
           uint16_t icmp_cksum = 0;
-          /*TODO: delete this comment int icmp_len = ntohs(ip_hdr->ip_len)-sizeof(sr_ip_hdr_t); */
           int icmp_len = size_icmp_t3 + ICMP_DATA_SIZE;
           icmp_cksum = cksum((const void *)icmp_hdr, icmp_len);
           icmp_hdr->icmp_sum = icmp_cksum;
@@ -154,129 +154,128 @@ void sr_handlepacket(struct sr_instance* sr,
           uint32_t ip_dst = dst->gw.s_addr;
           /* Look up ip_dst in the cache. */
           struct sr_arpentry * arp_dest = sr_arpcache_lookup(&cache, ip_dst);
+          struct sr_if *next_hop_iface = sr_get_interface(sr, dst->interface);
           if (arp_dest != NULL) {
             printf("===============entered cache ===============\n");
+            memcpy(eth_rsp_hdr->ether_shost, next_hop_iface->addr, ETHER_ADDR_LEN);
             memcpy(eth_rsp_hdr->ether_dhost, arp_dest->mac, ETHER_ADDR_LEN);
             sr_send_packet(sr,(uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len, dst->interface);
             free(ip_rsp_hdr);            
             free(eth_rsp_hdr);
           } else {
-            /* We want to send a request for the next-hop IP address, not our final destination. */
-            printf("Just queued something on to the ARP:\n");
-            print_addr_ip_int(ntohl(ip_dst));
-            struct sr_arpreq *req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,dst->interface);
-            if (req) { printf("yes we did the queue\n"); }else{ printf("no we did not\n");}
-            printf("======================================\n");
-            handle_arpreq(req, sr); 
-            if (req) { printf("yes we exist\n"); }else{ printf("no we no longer exist\n");}
-          }
+            /* Create the ARP request. */
+            sr_arp_hdr_t * arp_req = create_arp_request(next_hop_iface, dst->gw.s_addr);
+            sr_ethernet_hdr_t * eth_req = create_arp_req_eth(arp_req);
 
-          /* sr_send_packet(sr, (uint8_t *)eth_rsp_hdr, len, interface); */
-         
+            /* Send the ARP req. */
+            sr_send_packet(sr, (uint8_t *)eth_req, size_ether+sizeof(sr_arp_hdr_t),dst->interface);
+
+            /* We want to send a request for the next-hop IP address, not our final destination. */
+            /* Queue the arp req. */
+            /*TODO: do I actually need to call ntohl(ip_dst)? */
+            struct sr_arpreq *req = sr_arpcache_queuereq(&(sr->cache), ntohl(ip_dst), (uint8_t *)eth_rsp_hdr, size_ether+size_ip+icmp_len,dst->interface);
+          } /* end of sending ARP request if next-hop is not cached. */
+
           /* Free ICMP header. */ 
-          /*free(ip_rsp_hdr); 
-          free(eth_rsp_hdr);*/
+          free(ip_rsp_hdr); 
+          free(eth_rsp_hdr);
         } /* end if (icmp_hdr->icmp_type == 8) - echo request */
 
       /* TCP/UDP: if packet contains TCP(code=6)/UDP(code=17) payload */
       } else if (ip_proto == 6 || ip_proto == 17) {
-        create_and_send_icmp(ICMP_NO_DST, 3, ip_hdr, eth_hdr, sr, len, iface->name);
+         /*TODO: FIX THIS LATER */
+      /*  create_and_send_icmp(ICMP_NO_DST, 3, ip_hdr, eth_hdr, sr, len, iface->name); */
       /* OTHERWISE: packet contains something other than icmp/tcp/udp */
       } /* end if packet is TCP/UDP - 
          * else if (ip_proto == 6 || ip_proto == 17) */
 
     /* if packet is not for our interface */
     } else {
-      /** int valid = valid_pkt(ip_hdr); */
-      /* TODO: You can uncomment this if you want to see what it looks like when a ICMP is sent
-               because we couldn't find the destination.
-         create_and_send_icmp(ICMP_NO_DST, 0, ip_hdr, eth_hdr, sr, len, interface);
-       ^ NEED TO DELETE IT LATER
-       */
-      /* If the packet is valid... */
-      /**if (valid) { */
-          /** length of the ip packet */           
-          unsigned int ip_len = len - size_ether;
-          /** ARP cache */
-          struct sr_arpcache cache = sr->cache;
-          /** Destination IP address from the routing table */
-          struct sr_rt * dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
-          uint32_t ip_dst = dst->gw.s_addr;
-          /** ARP containing MAC address corresponding to the destionation IP address*/
-          struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
+      printf("ENTERED PACKET IS NOT FOR OUR INTERFACE\n");
+      /** length of the ip packet */           
+      unsigned int ip_len = len - size_ether;
+      /** ARP cache */
+      struct sr_arpcache cache = sr->cache;
+      /** Destination IP address from the routing table */
+      struct sr_rt * dst = check_routing_table(sr, eth_hdr, ip_hdr, len, iface);
+      uint32_t ip_dst = dst->gw.s_addr;
+      /** ARP containing MAC address corresponding to the destionation IP address*/
+      struct sr_arpentry *arp_dest = sr_arpcache_lookup(&cache, ip_dst);
 
-          /** sanity check fails */
-          if(valid_pkt(ip_hdr) == 0){
-            printf("%s\n", "sanity check fails");
-            /** TODO: send ICMP to host notify the error. */
-          }         
+      /** sanity check fails */
+      if(valid_pkt(ip_hdr) == 0){
+        printf("%s\n", "sanity check fails");
+        /** TODO: send ICMP to host notify the error. */
+      }         
           /** TTL > 0, the packet is still alive, 
               from updateTTL(), update TTL and recompute checksum */
-          if(updateTTL(sr, eth_hdr, ip_hdr, len, iface) > 0){
-            /** MAC address known, send the package */
-            if(arp_dest != NULL){
-              /** next hop mac address */
-              unsigned char *next_hop_mac = arp_dest->mac;
-              struct sr_if * pkt_iface = sr_get_interface(sr, dst->interface);
-              /* create a ehternet packet with new header */
-              uint8_t *eth_packet = create_eth_pkt(pkt_iface->addr, next_hop_mac, 
-                ethertype_ip, ip_packet, ip_len);
-              /** send the packet to the next hop */
-              sr_send_packet(sr, eth_packet, len, dst->interface);
-              free(arp_dest);
-            }
-            /** MAC address unknown, send an ARP requst, add the packet to the queue */
-            else{
-              /** queue the raw ethernet packet we recieved */
-              struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), packet, len, dst->interface);
-              handle_arpreq(req, sr); 
-            }
-          }
+      if(updateTTL(sr, eth_hdr, ip_hdr, len, iface) > 0){
+        /** MAC address known, send the package */
+        if(arp_dest != NULL){
+          /** next hop mac address */
+          unsigned char *next_hop_mac = arp_dest->mac;
+          struct sr_if * pkt_iface = sr_get_interface(sr, dst->interface);
+          /* create a ehternet packet with new header */
+          uint8_t *eth_packet = create_eth_pkt(pkt_iface->addr, next_hop_mac, 
+          ethertype_ip, ip_packet, ip_len);
+          /** send the packet to the next hop */
+          sr_send_packet(sr, eth_packet, len, dst->interface);
+          free(arp_dest);
+        } else {
+          /** MAC address unknown, send an ARP requst, add the packet to the queue */
+          /** queue the raw ethernet packet we recieved */
+          struct sr_arpreq * req = sr_arpcache_queuereq(&cache, ntohl(ip_dst), packet, len, dst->interface);
+          handle_arpreq(req, sr); 
+        } /* end of checking whether ARP destination is null. */
+      } /* end of updating TTL */
           /** TTL < 0, do nothing and drop the packet */
-      } /* end else packet is not for our interface. */
+    } /* end else packet is not for our interface. */
     
-  /* ARP: if packet contains a arp packet */
+  /* ARP: if packet contains a arp packet, it may or may not be for our interface - need to check */
   } else if (ethtype == ethertype_arp) {
     /* extract arp packet and parse arp header */
     uint8_t * arp_packet = packet + sizeof(sr_ethernet_hdr_t);
     sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) arp_packet;
     /* ARP REQUEST: if this is an arp request and directed to our interface, we can reply*/
     /* We don't have to reply to requests that are not made to our interface. */
-    if ((ntohs(arp_hdr->ar_op) == arp_op_request)) {
+    if ((ntohs(arp_hdr->ar_op) == arp_op_request) && (arp_hdr->ar_tip == iface->ip)) {
       /* send arp reply to sending host */
       sr_arp_hdr_t *tosend_arp = create_arp(iface, arp_hdr);
       /* create an ethernet packet & copy the arp packet into it */
       sr_ethernet_hdr_t *tosend_eth = create_arp_eth(iface, arp_hdr, tosend_arp);
+      memcpy(tosend_eth->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
       /* send packet */
       sr_send_packet(sr, (uint8_t *)tosend_eth, len, interface);
       /* free all memory allocated */
-      free(tosend_arp);
-      free(tosend_eth);
-    /* ARP REPLY: if this is an arp reply */
-    } else if (ntohs(arp_hdr->ar_op) == arp_op_reply) {
+      /*free(tosend_arp);
+      free(tosend_eth); */
+
+    /* ARP REPLY: if this is an arp reply  - do something if it is directed to our interface */
+    } else if (ntohs(arp_hdr->ar_op) == arp_op_reply && (arp_hdr->ar_tip == iface->ip)) { 
       printf("WE ARE AN ARP REPLY\n");
       /* Cache IP-MAC mapping */
-      if (&sr->cache) { printf("cache still exists\n"); }
-      if (&sr->cache.requests) { printf("cache requests still exist\n"); }
-      struct sr_arpreq * arpreq = sr_arpcache_insert(&(sr->cache), arp_hdr->ar_sha, arp_hdr->ar_sip);
+      struct sr_arpreq * arpreq = sr_arpcache_insert(&(sr->cache), arp_hdr->ar_sha, htonl(arp_hdr->ar_sip));
+      /* Forward the packets that are waiting on the reply. */
       if (arpreq != NULL) {
         printf("We successfully cached.\n");
         struct sr_packet *pkt;
         for(pkt = arpreq->packets; pkt != NULL; pkt = pkt->next) {
-          /* fill in destination MAC addr */
-          sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *)pkt;
-          memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
+          /* Get the interface that we need to send out on. */
           struct sr_if * pkt_iface = sr_get_interface(sr, pkt->iface);
+          /* fill in destination MAC addr */
+          sr_ethernet_hdr_t * tosend_eth = (sr_ethernet_hdr_t *)(pkt->buf);
+          memcpy(tosend_eth->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN);
           memcpy(tosend_eth->ether_shost, pkt_iface->addr, ETHER_ADDR_LEN);
           /* send packet */
+          /* TODO: updateTTL */
           printf("=====================================================\n");
           printf("PACKET WE ARE GOING TO SEND\n");
           print_hdrs((uint8_t *)tosend_eth, 98);
           printf("=====================================================\n");
-          sr_send_packet(sr, (uint8_t *)tosend_eth, pkt->len, pkt->iface);
+          sr_send_packet(sr, (uint8_t *)tosend_eth, pkt->len, pkt->iface); 
         }
         sr_arpreq_destroy(&sr->cache, arpreq); 
-      }
+      } /* end of we cached the ARP request successfully. */
     /* ERROR: if this is neither an arp request or reply */
     } else {
     }
