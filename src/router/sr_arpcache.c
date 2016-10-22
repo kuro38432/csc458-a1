@@ -28,22 +28,22 @@ void sr_arpcache_sweepreqs(struct sr_instance *sr) {
 
 void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
   time_t now = time(NULL);
+  /* check if its been 1 second since we last handled */
   if (difftime(now, req->sent) > 1.0) {
-      /* print_arp_req(req); */
+    /* check if sent more than 5 times. If so, send icmps back to the senders and destroy req. */
     if (req->times_sent >= 5) {
       struct sr_packet *pkt;
       for(pkt = req->packets; pkt != NULL; pkt = pkt->next) {
-         /* TODO: make ICMP packet, wrap in IP and Ethernet, send back to sender */
          sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)pkt;
          sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *)(pkt + size_ether);
          struct sr_if * iface = sr_get_interface_from_addr_eth(sr, eth_hdr->ether_dhost);
          create_and_send_icmp(3, 1, ip_hdr, eth_hdr, sr, ip_hdr->ip_len + size_ether, iface->name);
       }
       sr_arpreq_destroy(&sr->cache, req); 
+    /* if not sent more than 5 times, send arp request again and increment values. */
     } else {
       char * interface = req->packets->iface;
       struct sr_if *iface = sr_get_interface(sr, interface);
-      printf("checking iface\n");
       assert(iface);
       /* send arp request for this sr_arpreq */
       print_addr_eth(iface->addr);
@@ -53,8 +53,6 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       req->sent = now;
       req->times_sent++;
     }
-    /* TODO: printf("time: %d\n", now); */
-    printf("times sent: %d\n", req->times_sent);
   }
 }
 
