@@ -87,6 +87,7 @@ sr_arp_hdr_t * create_arp_request(struct sr_if *iface, uint32_t ip) {
   tosend_arp->ar_pln = 4;
   tosend_arp->ar_op = htons(arp_op_request);
 
+  memset(tosend_arp->ar_tha, 0, ETHER_ADDR_LEN);
   memcpy(tosend_arp->ar_sha, iface->addr, ETHER_ADDR_LEN);
 
   tosend_arp->ar_sip = iface->ip;

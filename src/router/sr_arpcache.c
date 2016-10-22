@@ -116,6 +116,7 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
     
     /* If the IP wasn't found, add it */
     if (!req) {
+      printf("++++++++++++ I got here! +++++++++++++++\n");
         req = (struct sr_arpreq *) calloc(1, sizeof(struct sr_arpreq));
         req->ip = ip;
         req->next = cache->requests;
@@ -168,10 +169,12 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
         }
         prev = req;
     }
-
+    printf("I FINISHED FIRST LOOPING. \n");
     int i;
     for (i = 0; i < SR_ARPCACHE_SZ; i++) {
+      printf(" ENTER SECOND LOOP.\n");
         if (!(cache->entries[i].valid))
+          printf(" I'm INSIDE A IF CONDITION.\n");
             break;
     }
     
