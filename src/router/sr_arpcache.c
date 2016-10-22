@@ -1,4 +1,3 @@
-#include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -39,26 +38,23 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
          struct sr_if * iface = sr_get_interface_from_addr_eth(sr, eth_hdr->ether_dhost);
          create_and_send_icmp(3, 1, ip_hdr, eth_hdr, sr, ip_hdr->ip_len + size_ether, iface->name);
       }
-      /* sr_arpreq_destroy(&sr->cache, req); */
+      sr_arpreq_destroy(&sr->cache, req); 
     } else {
       char * interface = req->packets->iface;
       struct sr_if *iface = sr_get_interface(sr, interface);
       /* send arp request for this sr_arpreq */
-      printf("THIS IS THE IFACE I'm using: %s\n", iface->name);
-      print_addr_ip_int(req->ip);
+      printf("INTERFACE BEING USED TO CREATE ARP REQ: %s\n", iface->name);
+      print_addr_eth(iface->addr);
       sr_arp_hdr_t * tosend_arp = create_arp_request(iface, ntohl(req->ip));
       sr_ethernet_hdr_t * tosend_eth = create_arp_req_eth(tosend_arp);
       printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
       printf("GOING TO SEND THIS OUT FROM ARPCACHE.C - initial ARP req\n");
       print_hdrs((uint8_t *)tosend_eth, 42);
       printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-      printf("INTERFACE: %s, iface: %s\n", interface, iface->name);
       sr_send_packet(sr, (uint8_t*)tosend_eth, sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t), interface);
       req->sent = now;
       req->times_sent++;
-      printf("REQUEST TIME SENT: %d\n", req->times_sent);
     }
-    printf("/////// mark 6 ////////\n");
     /* TODO: printf("time: %d\n", now); */
     printf("times sent: %d\n", req->times_sent);
   }
@@ -121,6 +117,8 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
         req->ip = ip;
         req->next = cache->requests;
         cache->requests = req;
+
+
     }
     
     /* Add the packet to the list of packets for this request */
@@ -149,12 +147,20 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
                                      unsigned char *mac,
                                      uint32_t ip)
 {
+    printf("Inserting ARPCACHE stuff\n");
     pthread_mutex_lock(&(cache->lock));
+    
+    if (cache->requests) {
+      printf("cache->requests\n");
+    }
+    if (cache) {
+      printf("cache\n");
+    }
    
-    printf(" I WANT TO INSERT IN THE CACHE.\n"); 
     struct sr_arpreq *req, *prev = NULL, *next = NULL; 
     for (req = cache->requests; req != NULL; req = req->next) {
-        printf("OURS: %d, THEIRS: %d\n", ip, req->ip);
+        printf("Entered cache loop\n");
+        print_addr_ip_int(req->ip);
         if (req->ip == ip) {            
             if (prev) {
                 next = req->next;
