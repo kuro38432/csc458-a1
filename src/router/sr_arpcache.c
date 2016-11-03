@@ -35,9 +35,21 @@ void handle_arpreq(struct sr_arpreq * req, struct sr_instance *sr) {
       struct sr_packet *pkt;
       for(pkt = req->packets; pkt != NULL; pkt = pkt->next) {
          sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *)pkt;
-         sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *)(pkt + size_ether);
          struct sr_if * iface = sr_get_interface_from_addr_eth(sr, eth_hdr->ether_dhost);
-         create_and_send_icmp(3, 1, ip_hdr, eth_hdr, sr, ip_hdr->ip_len + size_ether, iface->name);
+
+         /* RENATACHANGE: send ICMP packet. */
+         sr_ethernet_hdr_t *eth_rsp_hdr = create_icmp(eth_hdr, iface, ICMP_NO_DST, 1);
+
+         printf("------------------------------------------------------------\n");
+         printf(" PRINT IN HANDLE_ARPREQ\n");
+         print_hdrs((uint8_t *)eth_rsp_hdr, 98);
+         printf("------------------------------------------------------------\n");
+
+         send_icmp_packet(eth_rsp_hdr, sr, iface);
+
+         free(eth_rsp_hdr);
+
+         /* RENATACHANGE END */
       }
       sr_arpreq_destroy(&sr->cache, req); 
     /* if not sent more than 5 times, send arp request again and increment values. */
@@ -108,7 +120,6 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
     
     /* If the IP wasn't found, add it */
     if (!req) {
-      printf("++++++++++++ I got here! +++++++++++++++\n");
         req = (struct sr_arpreq *) calloc(1, sizeof(struct sr_arpreq));
         req->ip = ip;
         req->next = cache->requests;
@@ -145,15 +156,12 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
 {
     pthread_mutex_lock(&(cache->lock));
 
-    printf("WE WANT TO INSERT THIS INTO THE CACHE\n");
     print_addr_ip_int(ip);
     
     struct sr_arpreq *req, *prev = NULL, *next = NULL; 
     for (req = cache->requests; req != NULL; req = req->next) {
-        printf("Entered cache loop\n");
         print_addr_ip_int(req->ip);
         if (req->ip == ip) {            
-            printf("We found the req\n");
             if (prev) {
                 next = req->next;
                 prev->next = next;
@@ -169,9 +177,7 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
     }
     int i;
     for (i = 0; i < SR_ARPCACHE_SZ; i++) {
-      printf(" ENTER SECOND LOOP.\n");
         if (!(cache->entries[i].valid))
-          printf(" I'm INSIDE A IF CONDITION.\n");
             break;
     }
     

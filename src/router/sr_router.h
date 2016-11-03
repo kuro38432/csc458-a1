@@ -76,9 +76,29 @@ struct sr_rt* check_routing_table(struct sr_instance* sr, sr_ethernet_hdr_t * et
  sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface);
 uint8_t updateTTL(struct sr_instance* sr, sr_ethernet_hdr_t * eth_hdr, 
   sr_ip_hdr_t *ip_hdr, unsigned int len, struct sr_if *iface);
-uint8_t *create_eth_pkt(unsigned char *src_mac, unsigned char *dest_mac,
-  uint16_t packet_type, uint8_t *ip_packet, unsigned int ip_len);
 void print_arp_req(struct sr_arpreq *arpreq);
+
+/* RENATACHANGE BEGIN. */
+
+/* Create ICMP packet. */
+sr_ethernet_hdr_t *create_icmp(sr_ethernet_hdr_t *eth_hdr, struct sr_if *iface, int type, int code);
+
+/* Create ARP reply packet. */
+sr_ethernet_hdr_t *create_arp_rep(sr_ethernet_hdr_t *eth_hdr, struct sr_if *iface);
+
+/* Create ARP request packet, */
+sr_ethernet_hdr_t *create_arp_req(struct sr_if *iface, uint32_t ip);
+
+/* Handle finding the next-hop MAC address (look in cache or send ARP request).*/
+void handle_next_hop(struct sr_instance *sr, struct sr_rt *dst, sr_ethernet_hdr_t *eth_rsp_hdr, int pkt_size);
+
+/* Cache IP->MAC mapping and forward all packets in queue that require this mapping. */
+void cache_and_forward(struct sr_instance *sr, sr_ethernet_hdr_t *eth_hdr);
+
+/* Send ICMP packet and handle the ARP request that needs to be sent out. */
+void send_icmp_packet(sr_ethernet_hdr_t *eth_hdr, struct sr_instance *sr, struct sr_if *iface);
+
+/* RENATACHANGE END. */
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
